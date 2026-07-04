@@ -36,8 +36,7 @@ type OnboardingProfile = {
 };
 
 // Runs after ANY successful sign-in or sign-up (email/password or Google):
-// 1. Ensures a MongoDB profile document exists (with empty onboarding fields
-//    if it's brand new).
+// 1. Ensures a MongoDB profile document exists (with empty onboarding fields if it's brand new).
 // 2. Records/refreshes this browser as a logged-in device.
 // 3. Reports back whether onboarding still needs to happen.
 async function completeLogin(user: FirebaseUser, provider: "password" | "google.com") {
@@ -56,68 +55,78 @@ function AuthPage() {
   const { user, loading: authLoading } = useAuth();
   const [tab, setTab] = useState<Tab>("signin");
   const [stage, setStage] = useState<Stage>("checking");
-  const [redirectProcessing, setRedirectProcessing] = useState(false);
+  const [redirectProcessing, setRedirectProcessing] = useState(true);
   const [redirectError, setRedirectError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  // 1. Handle incoming Redirect responses from Google Sign-In on mount
+  // Unified Single-Effect Auth & Redirect Lifecycle Engine
   useEffect(() => {
-    setRedirectProcessing(true);
-    getRedirectResult(auth)
-      .then(async (result) => {
-        if (result?.user) {
-          const { needsOnboarding: incomplete } = await completeLogin(result.user, "google.com");
+    let cancelled = false;
+
+    async function handleAuthLifecycle() {
+      try {
+        // 1. Intercept incoming Google OAuth Redirect data payload on initialization
+        const redirectResult = await getRedirectResult(auth);
+        
+        if (redirectResult?.user) {
+          const { needsOnboarding: incomplete } = await completeLogin(redirectResult.user, "google.com");
+          if (cancelled) return;
+          
           if (incomplete) {
             setStage("onboarding");
           } else {
-            navigate({ to: "/dashboard" });
+            await navigate({ to: "/dashboard" });
           }
+          if (!cancelled) setRedirectProcessing(false);
+          return; // Early escape: Lifecycle finished handling redirect user cleanly
         }
-      })
-      .catch((err) => {
+      } catch (err) {
         console.error("Error resolving Google Auth Redirect:", err);
-        setRedirectError(friendlyAuthError(err));
-        setStage("auth");
-      })
-      .finally(() => {
-        setRedirectProcessing(false);
-      });
-  }, [navigate]);
+        if (!cancelled) setRedirectError(friendlyAuthError(err));
+      }
 
-  // 2. Route evaluation for normal session states
-  useEffect(() => {
-    if (authLoading || redirectProcessing) return;
+      // 2. Evaluate typical persistent sessions if no active redirect metadata is present
+      if (authLoading) return;
 
-    if (!user) {
-      setStage("auth");
-      return;
+      if (!user) {
+        if (!cancelled) {
+          setStage("auth");
+          setRedirectProcessing(false);
+        }
+        return;
+      }
+
+      try {
+        const providerId = user.providerData[0]?.providerId === "google.com" ? "google.com" : "password";
+        const { needsOnboarding: incomplete } = await completeLogin(user, providerId);
+        if (cancelled) return;
+
+        if (incomplete) {
+          setStage("onboarding");
+        } else {
+          await navigate({ to: "/dashboard" });
+        }
+      } catch (err) {
+        console.error("Session profile alignment failed:", err);
+        if (!cancelled) setStage("auth");
+      } finally {
+        if (!cancelled) setRedirectProcessing(false);
+      }
     }
 
-    let cancelled = false;
-    (async () => {
-      // Check if user is coming via a password login provider context if auth state shifts
-      const providerId = user.providerData[0]?.providerId === "google.com" ? "google.com" : "password";
-      const { needsOnboarding: incomplete } = await completeLogin(user, providerId);
-      if (cancelled) return;
-      if (incomplete) {
-        setStage("onboarding");
-      } else {
-        navigate({ to: "/dashboard" });
-      }
-    })();
+    handleAuthLifecycle();
 
     return () => {
       cancelled = true;
     };
-  }, [user, authLoading, redirectProcessing, navigate]);
+  }, [user, authLoading, navigate]);
 
-  if (stage === "checking" || redirectProcessing) {
+  // Loading Gate UI
+  if (stage === "checking" || (redirectProcessing && !user)) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3">
         <Loader2 className="h-6 w-6 animate-spin text-foreground/40" />
-        {redirectProcessing && (
-          <p className="text-xs font-medium text-foreground/50">Securing profile workspace...</p>
-        )}
+        <p className="text-xs font-medium text-foreground/50">Securing profile synchronization...</p>
       </div>
     );
   }
@@ -183,7 +192,7 @@ function AuthPage() {
   );
 }
 
-// ─── Auth (Sign In / Sign Up) ────────────────────────────────────────────────
+// ─── Auth (Sign In / Sign Up Card Wrapper) ────────────────────────────────────────────────
 function AuthCard({
   tab,
   setTab,
@@ -337,6 +346,7 @@ function friendlyAuthError(err: unknown): string {
   }
 }
 
+// ─── Sign In Form Module ────────────────────────────────────────────────
 function SignInForm({
   onSignedIn,
   onSignedUp,
@@ -448,6 +458,7 @@ function SignInForm({
   );
 }
 
+// ─── Sign Up Form Module ────────────────────────────────────────────────
 function SignUpForm({
   onSignedIn,
   onSignedUp,
@@ -552,7 +563,7 @@ function SignUpForm({
   );
 }
 
-// ─── Onboarding ──────────────────────────────────────────────────────────────
+// ─── Onboarding Form Module ────────────────────────────────────────────────
 function OnboardingCard({ onComplete }: { onComplete: () => void }) {
   const [profile, setProfile] = useState<OnboardingProfile>({
     fullName: "",
