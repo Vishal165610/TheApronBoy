@@ -1,21 +1,22 @@
-// Cache invalidation token: alpha-force-rebuild-1
-import { initializeApp, cert, getApps, getApp } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
+// Cache invalidation token: alpha-force-rebuild-3
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+const admin = require("firebase-admin");
 
 const projectId = process.env.FIREBASE_PROJECT_ID;
 const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
 const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
 
-// Robust serverless initialization checking
-const app = getApps().length === 0
-  ? initializeApp({
-      credential: cert({
+// Prevent multiple initializations in serverless environments
+const app = admin.apps.length === 0
+  ? admin.initializeApp({
+      credential: admin.credential.cert({
         projectId,
         clientEmail,
         privateKey,
       }),
     })
-  : getApp();
+  : admin.apps[0];
 
-// Export the auth client directly using the sub-path accessor
-export const adminAuth = getAuth(app);
+export const adminAuth = admin.auth(app);
