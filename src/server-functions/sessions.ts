@@ -3,7 +3,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { adminAuth } from "@/lib/firebase-admin";
 import { getDb } from "@/lib/mongo";
-import { getEvent } from "vinxi/http";
 
 // Called after every successful login (email/password or Google) to record
 // or refresh a "device" entry for this user. IP and user-agent are read
@@ -13,17 +12,18 @@ export const recordSession = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const decoded = await adminAuth.verifyIdToken(data.token);
     
-    // Safely retrieve the request context directly from the underlying Nitro/Vinxi server event
-    const event = getEvent();
-    const headers = event?.node?.req?.headers;
+    // Fallback headers using standard global contexts provided by the server environment
+    // @ts-ignore
+    const globalReq = typeof globalThis !== 'undefined' ? (globalThis as any).__h3__?.event?.node?.req || (globalThis as any).ViteRequest : null;
+    const headers = globalReq?.headers || {};
     
-    const userAgent = (headers?.["user-agent"] as string) ?? "unknown";
+    const userAgent = (headers["user-agent"] as string) ?? "unknown";
     
-    // Parse IP from standardized headers
-    const xForwardedFor = headers?.["x-forwarded-for"];
+    // Parse IP from standardized Vercel / Proxy headers safely
+    const xForwardedFor = headers["x-forwarded-for"];
     const ip = 
       (Array.isArray(xForwardedFor) ? xForwardedFor[0] : xForwardedFor?.split(",")[0]?.trim()) ??
-      (headers?.["x-real-ip"] as string) ??
+      (headers["x-real-ip"] as string) ??
       "unknown";
 
     const db = await getDb();
