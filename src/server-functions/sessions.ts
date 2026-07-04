@@ -1,5 +1,7 @@
+"use server"
+
 import { createServerFn } from "@tanstack/react-start";
-import { getRequest } from "@tanstack/react-start/server";
+import { useWebRequest } from "@tanstack/react-start/server";
 import { adminAuth } from "@/lib/firebase-admin";
 import { getDb } from "@/lib/mongo";
 
@@ -10,7 +12,9 @@ export const recordSession = createServerFn({ method: "POST" })
   .validator((data: { token: string; deviceId: string; deviceLabel: string }) => data)
   .handler(async ({ data }) => {
     const decoded = await adminAuth.verifyIdToken(data.token);
-    const request = getRequest();
+    
+    // Correct way to read incoming request context inside TanStack server functions
+    const request = useWebRequest();
     const userAgent = request?.headers.get("user-agent") ?? "unknown";
     const ip =
       request?.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
