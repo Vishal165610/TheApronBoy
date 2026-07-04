@@ -15,8 +15,8 @@ export default defineConfig({
   // Pass standard Vite overrides directly here
   vite: {
     ssr: {
-      // Prevents Vite from parsing and breaking firebase-admin internals
-      external: ["firebase-admin"],
+      // Prevents Vite from parsing and breaking firebase-admin internals or its subpaths
+      external: [/^firebase-admin(\/.*)?$/],
     },
   },
   // Explicitly tell Nitro we are deploying on Vercel, not Cloudflare
