@@ -12,4 +12,15 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  // Pass standard Vite overrides directly here
+  vite: {
+    ssr: {
+      // Prevents Vite from parsing and breaking firebase-admin internals
+      external: ["firebase-admin"],
+    },
+  },
+  // Explicitly tell Nitro we are deploying on Vercel, not Cloudflare
+  nitro: {
+    preset: "vercel",
+  },
 });
