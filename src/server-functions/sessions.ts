@@ -1,9 +1,9 @@
 "use server"
 
 import { createServerFn } from "@tanstack/react-start";
-import { getWebRequest } from "@tanstack/react-start/server";
 import { adminAuth } from "@/lib/firebase-admin";
 import { getDb } from "@/lib/mongo";
+import { getEvent } from "vinxi/http";
 
 // Called after every successful login (email/password or Google) to record
 // or refresh a "device" entry for this user. IP and user-agent are read
@@ -13,12 +13,17 @@ export const recordSession = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const decoded = await adminAuth.verifyIdToken(data.token);
     
-    // Correct way to read incoming request context inside TanStack server functions
-    const request = getWebRequest();
-    const userAgent = request?.headers.get("user-agent") ?? "unknown";
-    const ip =
-      request?.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-      request?.headers.get("x-real-ip") ??
+    // Safely retrieve the request context directly from the underlying Nitro/Vinxi server event
+    const event = getEvent();
+    const headers = event?.node?.req?.headers;
+    
+    const userAgent = (headers?.["user-agent"] as string) ?? "unknown";
+    
+    // Parse IP from standardized headers
+    const xForwardedFor = headers?.["x-forwarded-for"];
+    const ip = 
+      (Array.isArray(xForwardedFor) ? xForwardedFor[0] : xForwardedFor?.split(",")[0]?.trim()) ??
+      (headers?.["x-real-ip"] as string) ??
       "unknown";
 
     const db = await getDb();
