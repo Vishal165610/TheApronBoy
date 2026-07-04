@@ -1,7 +1,7 @@
 "use server"
 
 import { createServerFn } from "@tanstack/react-start";
-import { useWebRequest } from "@tanstack/react-start/server";
+import { getWebRequest } from "@tanstack/react-start/server";
 import { adminAuth } from "@/lib/firebase-admin";
 import { getDb } from "@/lib/mongo";
 
@@ -14,7 +14,7 @@ export const recordSession = createServerFn({ method: "POST" })
     const decoded = await adminAuth.verifyIdToken(data.token);
     
     // Correct way to read incoming request context inside TanStack server functions
-    const request = useWebRequest();
+    const request = getWebRequest();
     const userAgent = request?.headers.get("user-agent") ?? "unknown";
     const ip =
       request?.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
