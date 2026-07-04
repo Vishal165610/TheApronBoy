@@ -12,19 +12,34 @@ export const recordSession = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const decoded = await adminAuth.verifyIdToken(data.token);
     
-    // Fallback headers using standard global contexts provided by the server environment
-    // @ts-ignore
-    const globalReq = typeof globalThis !== 'undefined' ? (globalThis as any).__h3__?.event?.node?.req || (globalThis as any).ViteRequest : null;
-    const headers = globalReq?.headers || {};
+    // Safely extract global request headers
+    let headers: Record<string, any> = {};
+    try {
+      // @ts-ignore
+      const globalReq = typeof globalThis !== 'undefined' ? (globalThis as any).__h3__?.event?.node?.req || (globalThis as any).ViteRequest : null;
+      if (globalReq?.headers) {
+        headers = globalReq.headers;
+      }
+    } catch (e) {
+      console.warn("Could not read headers:", e);
+    }
     
     const userAgent = (headers["user-agent"] as string) ?? "unknown";
     
-    // Parse IP from standardized Vercel / Proxy headers safely
-    const xForwardedFor = headers["x-forwarded-for"];
-    const ip = 
-      (Array.isArray(xForwardedFor) ? xForwardedFor[0] : xForwardedFor?.split(",")[0]?.trim()) ??
-      (headers["x-real-ip"] as string) ??
-      "unknown";
+    // Fully safe IP address resolution fallback string sequence
+    let ip = "unknown";
+    try {
+      const xForwardedFor = headers["x-forwarded-for"];
+      if (xForwardedFor) {
+        ip = Array.isArray(xForwardedFor) 
+          ? xForwardedFor[0] 
+          : String(xForwardedFor).split(",")[0].trim();
+      } else {
+        ip = (headers["x-real-ip"] as string) ?? "unknown";
+      }
+    } catch (e) {
+      ip = "unknown";
+    }
 
     const db = await getDb();
     const now = new Date();
