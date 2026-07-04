@@ -22,10 +22,16 @@ export default defineConfig({
         "firebase-admin/app",
         "firebase-admin/auth"
       ],
+      noExternal: [],
     },
   },
   // Explicitly tell Nitro we are deploying on Vercel, not Cloudflare
   nitro: {
     preset: "vercel",
+    // Ensure the engine marks firebase-admin as an external production trace dependency
+    externals: {
+      inline: [],
+      external: ["firebase-admin"],
+    },
   },
 });
