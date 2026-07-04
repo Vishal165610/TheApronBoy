@@ -2,7 +2,8 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, Loader2, Mail, Lock, User, Phone, MapPin, GraduationCap, Target, Sparkles } from "lucide-react";
 import type { User as FirebaseUser } from "firebase/auth";
-import { auth, firebaseSignIn, firebaseSignUp, googleAuth } from "@/lib/firebase";
+import { signInWithRedirect, getRedirectResult, GoogleAuthProvider } from "firebase/auth";
+import { auth, firebaseSignIn, firebaseSignUp } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { getDeviceId, getDeviceLabel } from "@/lib/device";
 import { ensureUserRecord, getProfile, needsOnboarding, saveProfile } from "@/server-functions/profile";
@@ -52,15 +53,40 @@ async function completeLogin(user: FirebaseUser, provider: "password" | "google.
 }
 
 function AuthPage() {
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [tab, setTab] = useState<Tab>("signin");
   const [stage, setStage] = useState<Stage>("checking");
+  const [redirectProcessing, setRedirectProcessing] = useState(false);
+  const [redirectError, setRedirectError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  // Already-logged-in users shouldn't see the sign-in form at all — send
-  // them straight to onboarding (if incomplete) or the dashboard.
+  // 1. Handle incoming Redirect responses from Google Sign-In on mount
   useEffect(() => {
-    if (loading) return;
+    setRedirectProcessing(true);
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (result?.user) {
+          const { needsOnboarding: incomplete } = await completeLogin(result.user, "google.com");
+          if (incomplete) {
+            setStage("onboarding");
+          } else {
+            navigate({ to: "/dashboard" });
+          }
+        }
+      })
+      .catch((err) => {
+        console.error("Error resolving Google Auth Redirect:", err);
+        setRedirectError(friendlyAuthError(err));
+        setStage("auth");
+      })
+      .finally(() => {
+        setRedirectProcessing(false);
+      });
+  }, [navigate]);
+
+  // 2. Route evaluation for normal session states
+  useEffect(() => {
+    if (authLoading || redirectProcessing) return;
 
     if (!user) {
       setStage("auth");
@@ -69,7 +95,9 @@ function AuthPage() {
 
     let cancelled = false;
     (async () => {
-      const { needsOnboarding: incomplete } = await completeLogin(user, "password");
+      // Check if user is coming via a password login provider context if auth state shifts
+      const providerId = user.providerData[0]?.providerId === "google.com" ? "google.com" : "password";
+      const { needsOnboarding: incomplete } = await completeLogin(user, providerId);
       if (cancelled) return;
       if (incomplete) {
         setStage("onboarding");
@@ -81,12 +109,15 @@ function AuthPage() {
     return () => {
       cancelled = true;
     };
-  }, [user, loading, navigate]);
+  }, [user, authLoading, redirectProcessing, navigate]);
 
-  if (stage === "checking") {
+  if (stage === "checking" || redirectProcessing) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3">
         <Loader2 className="h-6 w-6 animate-spin text-foreground/40" />
+        {redirectProcessing && (
+          <p className="text-xs font-medium text-foreground/50">Securing profile workspace...</p>
+        )}
       </div>
     );
   }
@@ -137,6 +168,7 @@ function AuthPage() {
               setTab={setTab}
               onSignedIn={() => navigate({ to: "/dashboard" })}
               onSignedUp={() => setStage("onboarding")}
+              externalError={redirectError}
             />
           ) : (
             <OnboardingCard onComplete={() => navigate({ to: "/dashboard" })} />
@@ -157,11 +189,13 @@ function AuthCard({
   setTab,
   onSignedIn,
   onSignedUp,
+  externalError,
 }: {
   tab: Tab;
   setTab: (t: Tab) => void;
   onSignedIn: () => void;
   onSignedUp: () => void;
+  externalError: string | null;
 }) {
   return (
     <div>
@@ -184,9 +218,9 @@ function AuthCard({
       </div>
 
       {tab === "signin" ? (
-        <SignInForm onSignedIn={onSignedIn} onSignedUp={onSignedUp} />
+        <SignInForm onSignedIn={onSignedIn} onSignedUp={onSignedUp} externalError={externalError} />
       ) : (
-        <SignUpForm onSignedIn={onSignedIn} onSignedUp={onSignedUp} />
+        <SignUpForm onSignedIn={onSignedIn} onSignedUp={onSignedUp} externalError={externalError} />
       )}
     </div>
   );
@@ -306,9 +340,11 @@ function friendlyAuthError(err: unknown): string {
 function SignInForm({
   onSignedIn,
   onSignedUp,
+  externalError,
 }: {
   onSignedIn: () => void;
   onSignedUp: () => void;
+  externalError: string | null;
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -326,7 +362,7 @@ function SignInForm({
     }
     setLoading(true);
     try {
-      const { uid: _uid } = await firebaseSignIn(email, password);
+      await firebaseSignIn(email, password);
       const user = auth.currentUser!;
       const { needsOnboarding: incomplete } = await completeLogin(user, "password");
       incomplete ? onSignedUp() : onSignedIn();
@@ -341,16 +377,16 @@ function SignInForm({
     setError(null);
     setGoogleLoading(true);
     try {
-      await googleAuth();
-      const user = auth.currentUser!;
-      const { needsOnboarding: incomplete } = await completeLogin(user, "google.com");
-      incomplete ? onSignedUp() : onSignedIn();
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      await signInWithRedirect(auth, provider);
     } catch (err) {
       setError(friendlyAuthError(err));
-    } finally {
       setGoogleLoading(false);
     }
   }
+
+  const activeError = error || externalError;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4" noValidate>
@@ -395,15 +431,15 @@ function SignInForm({
         </button>
       </div>
 
-      {error && (
+      {activeError && (
         <p className="rounded-2xl bg-[var(--coral-soft)]/50 px-4 py-2 text-xs font-medium text-foreground">
-          {error}
+          {activeError}
         </p>
       )}
 
       <button
         type="submit"
-        disabled={loading}
+        disabled={loading || googleLoading}
         className="clay-btn flex w-full items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold disabled:opacity-70"
       >
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <><span>Login to Dashboard</span><ArrowRight className="h-4 w-4" /></>}
@@ -415,9 +451,11 @@ function SignInForm({
 function SignUpForm({
   onSignedIn,
   onSignedUp,
+  externalError,
 }: {
   onSignedIn: () => void;
   onSignedUp: () => void;
+  externalError: string | null;
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -435,7 +473,7 @@ function SignUpForm({
     try {
       await firebaseSignUp(email, password);
       const user = auth.currentUser!;
-      await completeLogin(user, "password"); // always goes to onboarding for a brand-new account
+      await completeLogin(user, "password");
       onSignedUp();
     } catch (err) {
       setError(friendlyAuthError(err));
@@ -448,16 +486,16 @@ function SignUpForm({
     setError(null);
     setGoogleLoading(true);
     try {
-      await googleAuth();
-      const user = auth.currentUser!;
-      const { needsOnboarding: incomplete } = await completeLogin(user, "google.com");
-      incomplete ? onSignedUp() : onSignedIn();
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      await signInWithRedirect(auth, provider);
     } catch (err) {
       setError(friendlyAuthError(err));
-    } finally {
       setGoogleLoading(false);
     }
   }
+
+  const activeError = error || externalError;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4" noValidate>
@@ -497,15 +535,15 @@ function SignUpForm({
         </div>
       </div>
 
-      {error && (
+      {activeError && (
         <p className="rounded-2xl bg-[var(--coral-soft)]/50 px-4 py-2 text-xs font-medium text-foreground">
-          {error}
+          {activeError}
         </p>
       )}
 
       <button
         type="submit"
-        disabled={loading}
+        disabled={loading || googleLoading}
         className="clay-btn flex w-full items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold disabled:opacity-70"
       >
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <><span>Continue</span><ArrowRight className="h-4 w-4" /></>}
