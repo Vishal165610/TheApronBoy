@@ -1,3 +1,4 @@
+// Cache invalidation token: alpha-force-rebuild-1
 import { initializeApp, cert, getApps } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 
