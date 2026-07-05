@@ -8,13 +8,18 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 // Node.js on Vercel loads these fine directly from node_modules, so we just
 // need to keep them external instead of bundled.
 //
-// Regex (not a function) on purpose: this project's Vite build uses
-// Rolldown, whose `external` option only accepts `string | RegExp` — a
-// matcher function throws "Invalid type: Expected (string | RegExp) but
-// received Function" at build time. The regex below still matches deep
-// imports like "firebase-admin/app" and "firebase-admin/auth", which a
-// plain string entry would silently miss.
-const serverOnlyExternals = [/^firebase-admin(\/.*)?$/, /^mongodb(\/.*)?$/];
+// NOTE: these two `external` options are two different underlying bindings
+// in this Vite/Rolldown setup and accept different types:
+//   - ssr.external              -> string[] | true   (NO RegExp allowed)
+//   - build.rollupOptions.external -> string | RegExp (a plain string here
+//                                     would miss subpath imports like
+//                                     "firebase-admin/app")
+// Package-name-only strings are fine for ssr.external since Vite resolves
+// externals there at the package level (covers all its subpath imports
+// automatically); Rollup's bundler-level external needs the regex to catch
+// those same subpaths explicitly.
+const ssrExternalPackages = ["firebase-admin", "mongodb"];
+const rollupExternalPatterns = [/^firebase-admin(\/.*)?$/, /^mongodb(\/.*)?$/];
 
 export default defineConfig({
   tanstackStart: {
@@ -22,13 +27,11 @@ export default defineConfig({
   },
   vite: {
     ssr: {
-      // Prevents Vite from parsing firebase-admin/mongodb into code chunks
-      external: serverOnlyExternals,
+      external: ssrExternalPackages,
     },
     build: {
       rollupOptions: {
-        // Keeps the import statements completely separate from the bundle output
-        external: serverOnlyExternals,
+        external: rollupExternalPatterns,
       },
     },
   },
