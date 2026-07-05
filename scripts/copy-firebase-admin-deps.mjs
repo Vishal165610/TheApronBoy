@@ -63,5 +63,7 @@ if (!existsSync(functionDir)) {
   process.exit(0);
 }
 
-copyPackage("firebase-admin", new Set());
+const seen = new Set();
+copyPackage("firebase-admin", seen);
+copyPackage("json-bigint", seen); // Force-inject json-bigint to the output
 console.log("[copy-firebase-admin-deps] done");
