@@ -1,6 +1,5 @@
-"use server"
-
 import { createServerFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
 import { adminAuth } from "@/lib/firebase-admin";
 import { getDb } from "@/lib/mongo";
 
@@ -11,35 +10,12 @@ export const recordSession = createServerFn({ method: "POST" })
   .validator((data: { token: string; deviceId: string; deviceLabel: string }) => data)
   .handler(async ({ data }) => {
     const decoded = await adminAuth.verifyIdToken(data.token);
-    
-    // Safely extract global request headers
-    let headers: Record<string, any> = {};
-    try {
-      // @ts-ignore
-      const globalReq = typeof globalThis !== 'undefined' ? (globalThis as any).__h3__?.event?.node?.req || (globalThis as any).ViteRequest : null;
-      if (globalReq?.headers) {
-        headers = globalReq.headers;
-      }
-    } catch (e) {
-      console.warn("Could not read headers:", e);
-    }
-    
-    const userAgent = (headers["user-agent"] as string) ?? "unknown";
-    
-    // Fully safe IP address resolution fallback string sequence
-    let ip = "unknown";
-    try {
-      const xForwardedFor = headers["x-forwarded-for"];
-      if (xForwardedFor) {
-        ip = Array.isArray(xForwardedFor) 
-          ? xForwardedFor[0] 
-          : String(xForwardedFor).split(",")[0].trim();
-      } else {
-        ip = (headers["x-real-ip"] as string) ?? "unknown";
-      }
-    } catch (e) {
-      ip = "unknown";
-    }
+    const request = getRequest();
+    const userAgent = request?.headers.get("user-agent") ?? "unknown";
+    const ip =
+      request?.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+      request?.headers.get("x-real-ip") ??
+      "unknown";
 
     const db = await getDb();
     const now = new Date();
