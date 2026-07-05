@@ -1,22 +1,15 @@
-// Cache invalidation token: alpha-force-rebuild-3
-import { createRequire } from "module";
+// SERVER-ONLY. Never import this from a component or client-side file.
+import { initializeApp, getApps, cert } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
 
-const require = createRequire(import.meta.url);
-const admin = require("firebase-admin");
+if (!getApps().length) {
+  initializeApp({
+    credential: cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+    }),
+  });
+}
 
-const projectId = process.env.FIREBASE_PROJECT_ID;
-const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
-
-// Prevent multiple initializations in serverless environments
-const app = admin.apps.length === 0
-  ? admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId,
-        clientEmail,
-        privateKey,
-      }),
-    })
-  : admin.apps[0];
-
-export const adminAuth = admin.auth(app);
+export const adminAuth = getAuth();
