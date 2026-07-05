@@ -4,14 +4,14 @@
   "sideEffects": false,
   "type": "module",
   "scripts": {
-  "dev": "vite dev",
-  "build": "vite build",
-  "postbuild": "node scripts/copy-firebase-admin-deps.mjs",
-  "build:dev": "vite build --mode development",
-  "preview": "vite preview",
-  "lint": "eslint .",
-  "format": "prettier --write ."
-},
+    "dev": "vite dev",
+    "build": "vite build",
+    "postbuild": "node scripts/copy-firebase-admin-deps.mjs",
+    "build:dev": "vite build --mode development",
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-accordion": "^1.2.12",
@@ -53,6 +53,7 @@
     "firebase": "^12.15.0",
     "firebase-admin": "^14.1.0",
     "input-otp": "^1.4.2",
+    "json-bigint": "^1.0.0",
     "lucide-react": "^0.575.0",
     "mongodb": "^7.4.0",
     "react": "^19.2.0",
