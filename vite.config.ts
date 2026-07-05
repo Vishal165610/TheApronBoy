@@ -1,53 +1,45 @@
 // @lovable.dev/vite-tanstack-config already includes standard plugins.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
-// Packages that must NOT be bundled into the server output — Vite/Rolldown
-// mangle firebase-admin and mongodb's internal module structure when they
-// try to inline them, causing runtime errors like
-// "Cannot read properties of undefined (reading 'SDK_VERSION')".
-// Node.js on Vercel loads these fine directly from node_modules, so we just
-// need to keep them external instead of bundled.
-//
-// NOTE: these two `external` options are two different underlying bindings
-// in this Vite/Rolldown setup and accept different types:
-//   - ssr.external              -> string[] | true   (NO RegExp allowed)
-//   - build.rollupOptions.external -> string | RegExp (a plain string here
-//                                     would miss subpath imports like
-//                                     "firebase-admin/app")
-// Package-name-only strings are fine for ssr.external since Vite resolves
-// externals there at the package level (covers all its subpath imports
-// automatically); Rollup's bundler-level external needs the regex to catch
-// those same subpaths explicitly.
-const ssrExternalPackages = ["firebase-admin", "mongodb"];
-const rollupExternalPatterns = [/^firebase-admin(\/.*)?$/, /^mongodb(\/.*)?$/];
-
 export default defineConfig({
   tanstackStart: {
     server: { entry: "server" },
   },
   vite: {
     ssr: {
-      external: ssrExternalPackages,
+      // ssr.external only accepts string[] | true (no RegExp) in this
+      // Vite/Rolldown version — plain package names are fine here since
+      // Vite resolves externals at the package level (covers subpaths
+      // like "firebase-admin/app" automatically).
+      external: ["firebase-admin"],
     },
     build: {
       rollupOptions: {
-        external: rollupExternalPatterns,
+        // Rollup/Rolldown's external DOES need the regex form to catch
+        // deep imports like "firebase-admin/app" and "firebase-admin/auth"
+        // — a plain string only matches the exact bare specifier.
+        external: [/^firebase-admin(\/.*)?$/],
       },
     },
   },
   nitro: {
     preset: "vercel",
-    // This project is on Nitro v3 (see package.json), which bundles
-    // dependencies by default via Rolldown and only traces/copies a
-    // built-in list of known native-binding packages. firebase-admin and
-    // mongodb aren't on that built-in list, so without this they either
-    // get bundled incorrectly (the original SDK_VERSION crash) or, once
-    // Vite's ssr.external below stops Vite from bundling them, silently
-    // never get copied into the deployed function at all (the
-    // "Cannot find package" errors). `traceDeps` is Nitro v3's actual
-    // config key for "trace and copy this package's real files into the
-    // build output" — the old v2 `externals: { external: [...] }` shape
-    // doesn't exist in v3 (that's why it was flagged by TypeScript).
-    traceDeps: ["firebase-admin", "mongodb"],
+    // Two things had to be true together, which earlier attempts only had
+    // one of at a time:
+    //  1. firebase-admin must be fully EXTERNAL from Vite's bundle — even
+    //     with the commonJS interop option set, Nitro's shared "_libs"
+    //     chunk (deduped across multiple server functions) still bundled
+    //     a broken copy of it ("Cannot read properties of undefined
+    //     (reading 'SDK_VERSION')"). Bundling it at all hits this, in at
+    //     least one of the code paths, no matter the interop setting.
+    //  2. Nitro v3 must be told to actually TRACE and copy the real
+    //     firebase-admin package files into the deployed function once
+    //     it's external — otherwise the external import resolves to
+    //     nothing at runtime ("Cannot find package 'firebase-admin'").
+    // mongodb is deliberately left OUT of both lists — it was never
+    // actually broken; an earlier assumption that "same class of package,
+    // externalize both defensively" caused it to break unnecessarily.
+    // Left to its default (bundled normally), it's fine.
+    traceDeps: ["firebase-admin"],
   },
 });
