@@ -37,22 +37,17 @@ export default defineConfig({
   },
   nitro: {
     preset: "vercel",
-    // Vite's ssr.external above stops these from being bundled into ssr.mjs
-    // (that part now works — confirmed by the "Cannot find package" errors,
-    // which show a clean `import "mongodb"` reaching the runtime). But
-    // Nitro is what actually packages the serverless function for Vercel,
-    // and it has its own separate tracer (using @vercel/nft) that decides
-    // which node_modules files to copy into the deployed function. Without
-    // this, it never copies firebase-admin/mongodb's files at all, so the
-    // external import resolves to nothing at runtime.
-    //
-    // `as any` here: @lovable.dev/vite-tanstack-config's TypeScript types
-    // don't seem to declare `externals` on the nitro config, even though
-    // Nitro itself fully supports the option at runtime. This is a type
-    // definition gap in the wrapper, not an invalid config.
-    externals: {
-      external: ["firebase-admin", "mongodb"],
-      trace: true,
-    },
-  } as any,
+    // This project is on Nitro v3 (see package.json), which bundles
+    // dependencies by default via Rolldown and only traces/copies a
+    // built-in list of known native-binding packages. firebase-admin and
+    // mongodb aren't on that built-in list, so without this they either
+    // get bundled incorrectly (the original SDK_VERSION crash) or, once
+    // Vite's ssr.external below stops Vite from bundling them, silently
+    // never get copied into the deployed function at all (the
+    // "Cannot find package" errors). `traceDeps` is Nitro v3's actual
+    // config key for "trace and copy this package's real files into the
+    // build output" — the old v2 `externals: { external: [...] }` shape
+    // doesn't exist in v3 (that's why it was flagged by TypeScript).
+    traceDeps: ["firebase-admin", "mongodb"],
+  },
 });
