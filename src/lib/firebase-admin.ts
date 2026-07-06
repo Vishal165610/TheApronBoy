@@ -1,4 +1,9 @@
 // SERVER-ONLY. Never import this from a component or client-side file.
+
+// FORCE GOOGLE AUTH LIBRARY TO USE NATIVE NODE FETCH BYPASSING THE BROKEN DEPENDENCY TREE
+// This must execute at the absolute top before any Firebase classes load.
+(globalThis as any).GaxiosUseNativeFetch = true;
+
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 
