@@ -219,7 +219,8 @@ function CourseHubPage() {
         },
       });
       razorpay.open();
-    } catch {
+    } catch (err) {
+      console.error("Checkout start error:", err);
       setPurchaseError("Could not start checkout. Please try again.");
       setPurchasing(false);
     }

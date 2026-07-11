@@ -52,7 +52,13 @@ export const createRazorpayOrder = createServerFn({ method: "POST" })
     const order = await razorpay.orders.create({
       amount: amountPaise,
       currency: "INR",
-      receipt: `${data.itemType}_${data.itemId}_${Date.now()}`,
+      // Razorpay caps `receipt` at 40 characters. itemType + a full 24-char
+      // Mongo ObjectId + timestamp blew past that (49 chars for
+      // "mentorship_<id>_<ts>"), which is exactly the kind of thing that
+      // produces a generic 400 from their API. Use a 1-letter type code and
+      // just the last 12 chars of the id — still unique enough for a
+      // receipt label, well under the limit.
+      receipt: `${data.itemType === "bundle" ? "b" : "m"}_${data.itemId.slice(-12)}_${Date.now()}`,
       notes: { uid: decoded.uid, itemType: data.itemType, itemId: data.itemId },
     });
 
