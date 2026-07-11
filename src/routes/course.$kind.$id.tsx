@@ -27,6 +27,34 @@ import {
   requestCallback,
   submitSupportTicket,
 } from "@/server-functions/batch-hub";
+import { createRazorpayOrder, verifyRazorpayPayment } from "@/server-functions/payments";
+
+// Razorpay's checkout.js attaches window.Razorpay — declared here since it's
+// loaded dynamically rather than imported as a module.
+declare global {
+  interface Window {
+    Razorpay: new (options: Record<string, unknown>) => { open: () => void };
+  }
+}
+
+const RAZORPAY_SCRIPT_SRC = "https://checkout.razorpay.com/v1/checkout.js";
+
+function loadRazorpayScript(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (window.Razorpay) return resolve();
+    const existing = document.querySelector(`script[src="${RAZORPAY_SCRIPT_SRC}"]`);
+    if (existing) {
+      existing.addEventListener("load", () => resolve());
+      existing.addEventListener("error", () => reject(new Error("Failed to load Razorpay checkout script")));
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = RAZORPAY_SCRIPT_SRC;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Failed to load Razorpay checkout script"));
+    document.body.appendChild(script);
+  });
+}
 
 export const Route = createFileRoute("/course/$kind/$id")({
   component: CourseHubPage,
@@ -97,7 +125,8 @@ function CourseHubPage() {
   const [announcements, setAnnouncements] = useState<AnnouncementRow[] | null>(null);
   const [isPurchased, setIsPurchased] = useState<boolean | null>(null);
   const [pdfModalUrl, setPdfModalUrl] = useState<string | null>(null);
-  const [checkoutNotice, setCheckoutNotice] = useState(false);
+  const [purchasing, setPurchasing] = useState(false);
+  const [purchaseError, setPurchaseError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
@@ -141,6 +170,60 @@ function CourseHubPage() {
   const sellingPrice = kind === "bundle" ? bundle?.sellingPrice : mentorship?.sellingPrice;
   const crossedPrice = kind === "bundle" ? bundle?.crossedPrice : mentorship?.crossedPrice;
   const discountPercent = kind === "bundle" ? bundle?.discountPercent : mentorship?.discountPercent;
+
+  async function handlePurchase() {
+    if (!user) return;
+    setPurchaseError(null);
+    setPurchasing(true);
+    try {
+      const token = await user.getIdToken();
+      const order = await createRazorpayOrder({ data: { token, itemType: kind, itemId: id } });
+      await loadRazorpayScript();
+
+      const razorpay = new window.Razorpay({
+        key: order.keyId,
+        amount: order.amount,
+        currency: order.currency,
+        order_id: order.orderId,
+        name: "The Apron Boy",
+        description: order.itemTitle,
+        prefill: { email: user.email ?? undefined },
+        theme: { color: "#0284c7" },
+        handler: async (response: {
+          razorpay_order_id: string;
+          razorpay_payment_id: string;
+          razorpay_signature: string;
+        }) => {
+          try {
+            const freshToken = await user.getIdToken();
+            await verifyRazorpayPayment({
+              data: {
+                token: freshToken,
+                itemType: kind,
+                itemId: id,
+                razorpayOrderId: response.razorpay_order_id,
+                razorpayPaymentId: response.razorpay_payment_id,
+                razorpaySignature: response.razorpay_signature,
+              },
+            });
+            // Unlock immediately — no page reload needed.
+            setIsPurchased(true);
+          } catch {
+            setPurchaseError("Payment succeeded but verification failed. Contact support with your payment ID.");
+          } finally {
+            setPurchasing(false);
+          }
+        },
+        modal: {
+          ondismiss: () => setPurchasing(false),
+        },
+      });
+      razorpay.open();
+    } catch {
+      setPurchaseError("Could not start checkout. Please try again.");
+      setPurchasing(false);
+    }
+  }
 
   return (
     <div className="relative min-h-screen overflow-hidden">
@@ -250,16 +333,16 @@ function CourseHubPage() {
               <p className="text-xs text-foreground/50">Purchase Batch to Unlock Everything</p>
             </div>
             <button
-              onClick={() => setCheckoutNotice(true)}
-              className="clay-btn shrink-0 rounded-full px-5 py-2.5 text-sm font-semibold"
+              onClick={handlePurchase}
+              disabled={purchasing}
+              className="clay-btn flex shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold disabled:opacity-70"
             >
-              Purchase Batch
+              {purchasing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Purchase Batch"}
             </button>
           </div>
-          {checkoutNotice && (
-            <div className="clay-inset mx-auto mt-2 max-w-xl rounded-2xl px-4 py-2 text-center text-xs text-foreground/60">
-              Checkout isn't connected to Razorpay yet — this button is wired and ready for that
-              integration once API keys and a webhook are set up.
+          {purchaseError && (
+            <div className="clay-inset mx-auto mt-2 max-w-xl rounded-2xl bg-[var(--coral-soft)]/50 px-4 py-2 text-center text-xs font-medium text-foreground">
+              {purchaseError}
             </div>
           )}
         </div>
