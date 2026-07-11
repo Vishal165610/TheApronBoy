@@ -1,20 +1,21 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, Loader2, Mail, Lock, User, Phone, MapPin, GraduationCap, Target, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, KeyRound, Loader2, Mail, Lock, User, Phone, MapPin, GraduationCap, Target, Sparkles } from "lucide-react";
 import type { User as FirebaseUser } from "firebase/auth";
 import { auth, firebaseSignIn, firebaseSignUp, googleAuth } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { getDeviceId, getDeviceLabel } from "@/lib/device";
 import { ensureUserRecord, getProfile, needsOnboarding, saveProfile } from "@/server-functions/profile";
 import { recordSession } from "@/server-functions/sessions";
+import { sendEmailVerificationOtp, verifyEmailVerificationOtp } from "@/server-functions/email-verification";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
-      { title: "Sign in · The Apron Boy" },
-      { name: "description", content: "Sign in or create your Apron Boy account to access the NEET CBT engine, smart dashboards and mentor ecosystem." },
-      { property: "og:title", content: "Sign in · The Apron Boy" },
-      { property: "og:description", content: "Access your NEET prep dashboard on The Apron Boy." },
+      { title: "Sign in · Edurack" },
+      { name: "description", content: "Sign in or create your Edurack account to access the NEET CBT engine, smart dashboards and mentor ecosystem." },
+      { property: "og:title", content: "Sign in · Edurack" },
+      { property: "og:description", content: "Access your NEET prep dashboard on Edurack." },
       { name: "robots", content: "noindex" },
     ],
   }),
@@ -22,7 +23,7 @@ export const Route = createFileRoute("/auth")({
 });
 
 type Tab = "signin" | "signup";
-type Stage = "auth" | "onboarding" | "checking";
+type Stage = "auth" | "onboarding" | "checking" | "verify-email";
 
 type OnboardingProfile = {
   fullName: string;
@@ -55,10 +56,13 @@ function AuthPage() {
   const { user, loading } = useAuth();
   const [tab, setTab] = useState<Tab>("signin");
   const [stage, setStage] = useState<Stage>("checking");
+  const [pendingEmail, setPendingEmail] = useState("");
   const navigate = useNavigate();
 
-  // Already-logged-in users shouldn't see the sign-in form at all — send
-  // them straight to onboarding (if incomplete) or the dashboard.
+  // Already-logged-in users shouldn't see the sign-in form at all. If it's a
+  // password account that's never verified its email, send them to the
+  // verification screen first — Google accounts skip this since Google
+  // already verifies emails on its end.
   useEffect(() => {
     if (loading) return;
 
@@ -69,6 +73,16 @@ function AuthPage() {
 
     let cancelled = false;
     (async () => {
+      await user.reload();
+      const isPasswordUser = user.providerData.some((p) => p.providerId === "password");
+
+      if (isPasswordUser && !user.emailVerified) {
+        if (cancelled) return;
+        setPendingEmail(user.email ?? "");
+        setStage("verify-email");
+        return;
+      }
+
       const { needsOnboarding: incomplete } = await completeLogin(user, "password");
       if (cancelled) return;
       if (incomplete) {
@@ -82,6 +96,21 @@ function AuthPage() {
       cancelled = true;
     };
   }, [user, loading, navigate]);
+
+  async function handleVerified() {
+    const current = auth.currentUser;
+    if (!current) {
+      setStage("auth");
+      return;
+    }
+    await current.reload();
+    const { needsOnboarding: incomplete } = await completeLogin(current, "password");
+    if (incomplete) {
+      setStage("onboarding");
+    } else {
+      navigate({ to: "/dashboard" });
+    }
+  }
 
   if (stage === "checking") {
     return (
@@ -125,20 +154,28 @@ function AuthPage() {
             />
           </div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-foreground/60">
-            The Apron Boy
+            Edurack
           </p>
         </div>
 
         {/* Main card */}
         <div className="clay w-full max-w-xl p-5 sm:p-8">
-          {stage === "auth" ? (
+          {stage === "auth" && (
             <AuthCard
               tab={tab}
               setTab={setTab}
               onSignedIn={() => navigate({ to: "/dashboard" })}
               onSignedUp={() => setStage("onboarding")}
+              onNeedsVerification={(email) => {
+                setPendingEmail(email);
+                setStage("verify-email");
+              }}
             />
-          ) : (
+          )}
+          {stage === "verify-email" && (
+            <EmailVerificationCard email={pendingEmail} onVerified={handleVerified} />
+          )}
+          {stage === "onboarding" && (
             <OnboardingCard onComplete={() => navigate({ to: "/dashboard" })} />
           )}
         </div>
@@ -157,11 +194,13 @@ function AuthCard({
   setTab,
   onSignedIn,
   onSignedUp,
+  onNeedsVerification,
 }: {
   tab: Tab;
   setTab: (t: Tab) => void;
   onSignedIn: () => void;
   onSignedUp: () => void;
+  onNeedsVerification: (email: string) => void;
 }) {
   return (
     <div>
@@ -184,9 +223,9 @@ function AuthCard({
       </div>
 
       {tab === "signin" ? (
-        <SignInForm onSignedIn={onSignedIn} onSignedUp={onSignedUp} />
+        <SignInForm onSignedIn={onSignedIn} onSignedUp={onSignedUp} onNeedsVerification={onNeedsVerification} />
       ) : (
-        <SignUpForm onSignedIn={onSignedIn} onSignedUp={onSignedUp} />
+        <SignUpForm onSignedIn={onSignedIn} onSignedUp={onSignedUp} onNeedsVerification={onNeedsVerification} />
       )}
     </div>
   );
@@ -306,9 +345,11 @@ function friendlyAuthError(err: unknown): string {
 function SignInForm({
   onSignedIn,
   onSignedUp,
+  onNeedsVerification,
 }: {
   onSignedIn: () => void;
   onSignedUp: () => void;
+  onNeedsVerification: (email: string) => void;
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -326,8 +367,19 @@ function SignInForm({
     }
     setLoading(true);
     try {
-      const { uid: _uid } = await firebaseSignIn(email, password);
+      await firebaseSignIn(email, password);
       const user = auth.currentUser!;
+      await user.reload();
+
+      // Block unverified password accounts here — send a fresh code and
+      // route to the verification screen instead of the dashboard.
+      if (!user.emailVerified) {
+        const token = await user.getIdToken();
+        await sendEmailVerificationOtp({ data: { token } });
+        onNeedsVerification(user.email ?? email);
+        return;
+      }
+
       const { needsOnboarding: incomplete } = await completeLogin(user, "password");
       incomplete ? onSignedUp() : onSignedIn();
     } catch (err) {
@@ -390,9 +442,9 @@ function SignInForm({
       </div>
 
       <div className="flex justify-end">
-        <button type="button" className="text-xs font-semibold text-[var(--sky-deep)] hover:underline">
+        <Link to="/forgot-password" className="text-xs font-semibold text-[var(--sky-deep)] hover:underline">
           Forgot Password?
-        </button>
+        </Link>
       </div>
 
       {error && (
@@ -415,9 +467,11 @@ function SignInForm({
 function SignUpForm({
   onSignedIn,
   onSignedUp,
+  onNeedsVerification,
 }: {
   onSignedIn: () => void;
   onSignedUp: () => void;
+  onNeedsVerification: (email: string) => void;
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -435,8 +489,16 @@ function SignUpForm({
     try {
       await firebaseSignUp(email, password);
       const user = auth.currentUser!;
-      await completeLogin(user, "password"); // always goes to onboarding for a brand-new account
-      onSignedUp();
+      const token = await user.getIdToken();
+
+      // Create the Mongo profile placeholder now, but hold off on
+      // recordSession/getProfile until after verification — that way we
+      // don't register a "logged in device" for an account that can't
+      // actually use the dashboard yet.
+      await ensureUserRecord({ data: { token, provider: "password" } });
+      await sendEmailVerificationOtp({ data: { token } });
+
+      onNeedsVerification(email);
     } catch (err) {
       setError(friendlyAuthError(err));
     } finally {
@@ -510,6 +572,109 @@ function SignUpForm({
       >
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <><span>Continue</span><ArrowRight className="h-4 w-4" /></>}
       </button>
+    </form>
+  );
+}
+
+// ─── Email Verification ──────────────────────────────────────────────────────
+function EmailVerificationCard({ email, onVerified }: { email: string; onVerified: () => void }) {
+  const [code, setCode] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState(60);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const id = setInterval(() => setCooldown((c) => Math.max(0, c - 1)), 1000);
+    return () => clearInterval(id);
+  }, [cooldown]);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!/^\d{6}$/.test(code)) return setError("Enter the 6-digit code.");
+    setLoading(true);
+    try {
+      const user = auth.currentUser;
+      if (!user) return setError("Your session expired. Please sign in again.");
+      const token = await user.getIdToken();
+      const res = await verifyEmailVerificationOtp({ data: { token, code } });
+      if (!res.ok) return setError(res.error ?? "Incorrect code.");
+      onVerified();
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleResend() {
+    if (cooldown > 0) return;
+    setError(null);
+    setResending(true);
+    try {
+      const user = auth.currentUser;
+      if (!user) return setError("Your session expired. Please sign in again.");
+      const token = await user.getIdToken();
+      await sendEmailVerificationOtp({ data: { token } });
+      setCooldown(60);
+    } catch {
+      setError("Couldn't resend the code. Please try again.");
+    } finally {
+      setResending(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+      <div className="mb-2 text-center">
+        <h1 className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+          Verify your email
+        </h1>
+        <p className="mt-1 text-sm text-foreground/60">
+          We sent a 6-digit code to {email}. Enter it below to activate your account.
+        </p>
+      </div>
+
+      <div className="clay-inset flex items-center gap-3 px-4 py-3 focus-within:ring-2 focus-within:ring-[var(--sky-deep)]/40">
+        <KeyRound className="h-4 w-4 text-foreground/50" />
+        <input
+          inputMode="numeric"
+          placeholder="6-digit code"
+          value={code}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          maxLength={6}
+          required
+          style={{ letterSpacing: "0.3em", fontWeight: 600, textAlign: "center" }}
+          className="w-full bg-transparent text-sm text-foreground placeholder:text-foreground/40 focus:outline-none"
+        />
+      </div>
+
+      {error && (
+        <p className="rounded-2xl bg-[var(--coral-soft)]/50 px-4 py-2 text-xs font-medium text-foreground">
+          {error}
+        </p>
+      )}
+
+      <button
+        type="submit"
+        disabled={loading}
+        className="clay-btn flex w-full items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold disabled:opacity-70"
+      >
+        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <><span>Verify & continue</span><ArrowRight className="h-4 w-4" /></>}
+      </button>
+
+      <div className="text-center text-xs text-foreground/60">
+        <button
+          type="button"
+          onClick={handleResend}
+          disabled={cooldown > 0 || resending}
+          className="font-semibold text-[var(--sky-deep)] hover:underline disabled:text-foreground/40 disabled:no-underline"
+        >
+          {resending ? "Sending..." : cooldown > 0 ? `Resend in ${cooldown}s` : "Resend code"}
+        </button>
+      </div>
     </form>
   );
 }

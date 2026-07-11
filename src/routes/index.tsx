@@ -17,10 +17,10 @@ export const Route = createFileRoute("/")({
 });
 
 const navLinks = [
-  { label: "Simulator", href: "#simulator" },
+  { label: "CBT Simulator", href: "#simulator" },
   { label: "Features", href: "#features" },
-  { label: "Mentors", href: "#features" },
-  { label: "Pricing", href: "#" },
+  { label: "AIIMS Mentors", href: "#features" },
+  { label: "Test Series", href: "#" },
 ];
 
 function Index() {
@@ -43,17 +43,11 @@ function Header() {
     <header className="sticky top-0 z-50 px-3 pt-3 sm:px-6 sm:pt-5">
       <div className="clay-sm mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
         <a href="#" className="flex items-center gap-2 min-w-0">
-          <img
-            src="https://yt3.googleusercontent.com/qdo1xrlhfa82iLMS4yqWLJtgFt4-jizxXkvR_6HuYzYIv65nN0zg3-J3YDEwRK405xh_ASSgtQ=s160-c-k-c0x00ffffff-no-rj"
-            alt="The Apron Boy"
-            className="h-8 w-auto shrink-0"
-            onError={(e) => {
-              const el = e.currentTarget as HTMLImageElement;
-              el.replaceWith(Object.assign(document.createElement("span"), { className: "grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-sky-500 text-white font-bold", textContent: "A" }));
-            }}
-          />
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-600 to-teal-500 text-white font-bold font-display text-lg shadow-sm">
+            E
+          </span>
           <span className="truncate font-display text-lg font-bold tracking-tight sm:text-xl">
-            The Apron Boy
+            EDURACK
           </span>
         </a>
 
@@ -112,38 +106,38 @@ function Hero() {
     <section className="px-4 pb-16 pt-10 sm:px-6 sm:pt-16 lg:pt-24">
       <div className="mx-auto max-w-5xl text-center">
         <div className="clay-chip mx-auto inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-sky-700 sm:text-sm">
-          <Sparkles className="h-4 w-4" />
-          NEET 2026 CBT Alert
+          <Sparkles className="h-4 w-4 animate-pulse" />
+          NEET 2027 CBT Transition Update
         </div>
         <h1 className="fluid-h1 mt-6 font-display font-extrabold tracking-tight text-slate-900">
-          NEET is officially shifting to{" "}
+          NEET is shifting to{" "}
           <span className="relative inline-block">
             <span className="relative z-10 bg-gradient-to-br from-sky-600 to-teal-500 bg-clip-text text-transparent">
               Computer Based Testing
             </span>
           </span>
-          . Are you ready for the screen?
+          . Master the screen early.
         </h1>
         <p className="fluid-body mx-auto mt-6 max-w-2xl text-slate-600">
-          Don't let the exam day layout shock you. The Apron Boy delivers an absolute
-          <b className="text-slate-800"> 1:1 exact NTA replica</b> test engine interface so you
-          practice in the real environment before the final day.
+          Don't let the sudden shift to digital layout break your focus. EDURACK provides a 
+          <b className="text-slate-800"> 1:1 pixel-exact NTA replica</b> test simulator paired with elite 
+          mentorship from top AIIMS rankers.
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <Link to="/auth" className="clay-btn group inline-flex items-center gap-2 px-7 py-4 text-base font-bold sm:text-lg">
-            Try Free Mock Test
+            Start Free CBT Mock Test
             <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
           </Link>
           <a href="#simulator" className="clay-btn-ghost px-6 py-4 text-sm font-semibold sm:text-base">
-            See the engine
+            Explore Simulator
           </a>
         </div>
 
         <div className="mt-10 grid grid-cols-3 gap-3 sm:mx-auto sm:max-w-xl">
           {[
-            { k: "1:1", v: "NTA Replica" },
-            { k: "50k+", v: "Aspirants" },
-            { k: "4.9★", v: "Rating" },
+            { k: "1:1", v: "CBT Interface" },
+            { k: "100%", v: "AIIMS Mentors" },
+            { k: "2027", v: "Format Ready" },
           ].map((s) => (
             <div key={s.k} className="clay-sm px-3 py-4">
               <div className="font-display text-xl font-bold text-slate-900 sm:text-2xl">{s.k}</div>
@@ -161,14 +155,14 @@ function SimulatorSection() {
     <section id="simulator" className="px-4 py-16 sm:px-6 lg:py-24">
       <div className="mx-auto max-w-6xl text-center">
         <div className="clay-chip inline-flex px-4 py-1.5 text-xs font-semibold text-teal-700">
-          THE NTA CBT ENGINE
+          THE EDURACK TESTING ENGINE
         </div>
         <h2 className="fluid-h2 mx-auto mt-4 max-w-3xl font-display font-extrabold text-slate-900">
-          Not a clone. A pixel-exact replica of the real exam.
+          Train your muscle memory for the digital shift.
         </h2>
         <p className="fluid-body mx-auto mt-3 max-w-2xl text-slate-600">
-          Same header. Same orange subject bar. Same right-side palette. Same button behaviour.
-          Muscle-memory built weeks before D-day.
+          Same right-side question palette, identical navigation flags, and exact section indicators. 
+          Eliminate digital exam anxiety months before you step into the test center.
         </p>
       </div>
       <div className="mt-10">
@@ -181,29 +175,29 @@ function SimulatorSection() {
 const features = [
   {
     icon: MonitorPlay,
-    title: "1:1 NTA Replica Simulator",
-    desc: "Every pixel, shortcut and status color mirrors the real NTA CBT interface.",
+    title: "1:1 NTA CBT Engine",
+    desc: "Every shortcut, color state, and layout design precisely mirrors the upcoming digital format.",
     color: "text-sky-600",
     bg: "bg-sky-100",
   },
   {
     icon: LayoutDashboard,
-    title: "Smart Dashboards",
-    desc: "Dedicated tracks for Droppers, Class 11 and Class 12 with syllabus-aware planning.",
+    title: "Syllabus-Driven Trackers",
+    desc: "Tailored structures for Class 11, 12, and Droppers to pace out high-weightage topics.",
     color: "text-teal-600",
     bg: "bg-teal-100",
   },
   {
     icon: CalendarCheck,
-    title: "Dual Mentor Ecosystem",
-    desc: "Book 1:1s directly via Google Calendar with auto-generated Google Meet links.",
+    title: "Elite AIIMS Mentorship",
+    desc: "Direct 50-50 revenue split model brings you raw strategies from students who actually conquered the paper.",
     color: "text-orange-600",
     bg: "bg-orange-100",
   },
   {
     icon: LineChart,
-    title: "Deep Performance Analytics",
-    desc: "Chapter-level accuracy, time-per-question and rank projections after every test.",
+    title: "Screen Analytics",
+    desc: "Tracks your speed per question, subject-wise accuracy, and projected multi-shift normalized percentile.",
     color: "text-purple-600",
     bg: "bg-purple-100",
   },
@@ -215,10 +209,10 @@ function FeaturesGrid() {
       <div className="mx-auto max-w-6xl">
         <div className="mx-auto max-w-2xl text-center">
           <div className="clay-chip inline-flex px-4 py-1.5 text-xs font-semibold text-sky-700">
-            WHY THE APRON BOY
+            THE EDURACK ADVANTAGE
           </div>
           <h2 className="fluid-h2 mt-4 font-display font-extrabold text-slate-900">
-            Everything a serious NEET aspirant actually needs.
+            Built for serious aspirants tackling the new pattern.
           </h2>
         </div>
 
@@ -237,13 +231,13 @@ function FeaturesGrid() {
         <div className="clay mt-16 grid grid-cols-1 items-center gap-6 p-8 md:grid-cols-[1fr_auto] md:p-12">
           <div>
             <h3 className="font-display text-2xl font-extrabold text-slate-900 sm:text-3xl">
-              Start your first mock in under 60 seconds.
+              Launch your first CBT mock right now.
             </h3>
-            <p className="mt-2 text-slate-600">No credit card. No commitments. Just the real thing.</p>
+            <p className="mt-2 text-slate-600">Get ahead of the curve before the official 2027 transition hits.</p>
           </div>
-          <button className="clay-btn inline-flex items-center gap-2 px-7 py-4 text-base font-bold justify-self-start md:justify-self-end">
+          <Link to="/auth" className="clay-btn inline-flex items-center gap-2 px-7 py-4 text-base font-bold justify-self-start md:justify-self-end">
             Try Free Mock Test <ArrowRight className="h-5 w-5" />
-          </button>
+          </Link>
         </div>
       </div>
     </section>
@@ -257,18 +251,20 @@ function Footer() {
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-4">
           <div>
             <div className="flex items-center gap-2">
-              <img src="https://yt3.googleusercontent.com/qdo1xrlhfa82iLMS4yqWLJtgFt4-jizxXkvR_6HuYzYIv65nN0zg3-J3YDEwRK405xh_ASSgtQ=s160-c-k-c0x00ffffff-no-rj" alt="" className="h-7 w-auto" onError={(e)=>((e.currentTarget as HTMLImageElement).style.display='none')} />
-              <span className="font-display text-lg font-bold">The Apron Boy</span>
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-sky-600 to-teal-500 text-white font-bold font-display text-xs">
+                E
+              </span>
+              <span className="font-display text-lg font-bold">EDURACK</span>
             </div>
-            <p className="mt-3 text-sm text-slate-600">Made by medicos, for medicos.</p>
+            <p className="mt-3 text-sm text-slate-600">The next-gen CBT testing and mentorship platform.</p>
           </div>
-          <FooterCol title="Product" items={["Simulator", "Dashboards", "Analytics", "Mentors"]} />
-          <FooterCol title="Company" items={["About", "Blog", "Careers", "Contact"]} />
-          <FooterCol title="Legal" items={["Terms", "Privacy", "Refund", "Cookies"]} />
+          <FooterCol title="Product" items={["CBT Simulator", "Syllabus Trackers", "Analytics", "Mentors"]} />
+          <FooterCol title="Aspirants" items={["NEET Hub", "JEE Hub (Coming Soon)", "Free Papers", "Success Stories"]} />
+          <FooterCol title="Legal" items={["Terms", "Privacy", "Refund", "Contact"]} />
         </div>
         <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/70 pt-5 text-xs text-slate-500">
-          <span>© {new Date().getFullYear()} The Apron Boy. All rights reserved.</span>
-          <span>Built for NEET 2026 CBT aspirants.</span>
+          <span>© {new Date().getFullYear()} EDURACK. All rights reserved.</span>
+          <span>Engineered for the NEET 2027 CBT Shift.</span>
         </div>
       </div>
     </footer>

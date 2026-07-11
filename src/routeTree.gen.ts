@@ -10,15 +10,23 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as MentorDashboardRouteImport } from './routes/mentor.dashboard'
 import { Route as AdminDashboardRouteImport } from './routes/admin.dashboard'
 import { Route as AdminAuthRouteImport } from './routes/admin.auth'
+import { Route as CourseKindIdRouteImport } from './routes/course.$kind.$id'
 
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRoute = DashboardRouteImport.update({
@@ -36,6 +44,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MentorDashboardRoute = MentorDashboardRouteImport.update({
+  id: '/mentor/dashboard',
+  path: '/mentor/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminDashboardRoute = AdminDashboardRouteImport.update({
   id: '/admin/dashboard',
   path: '/admin/dashboard',
@@ -46,31 +59,45 @@ const AdminAuthRoute = AdminAuthRouteImport.update({
   path: '/admin/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CourseKindIdRoute = CourseKindIdRouteImport.update({
+  id: '/course/$kind/$id',
+  path: '/course/$kind/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof DashboardRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/profile': typeof ProfileRoute
   '/admin/auth': typeof AdminAuthRoute
   '/admin/dashboard': typeof AdminDashboardRoute
+  '/mentor/dashboard': typeof MentorDashboardRoute
+  '/course/$kind/$id': typeof CourseKindIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof DashboardRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/profile': typeof ProfileRoute
   '/admin/auth': typeof AdminAuthRoute
   '/admin/dashboard': typeof AdminDashboardRoute
+  '/mentor/dashboard': typeof MentorDashboardRoute
+  '/course/$kind/$id': typeof CourseKindIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof DashboardRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/profile': typeof ProfileRoute
   '/admin/auth': typeof AdminAuthRoute
   '/admin/dashboard': typeof AdminDashboardRoute
+  '/mentor/dashboard': typeof MentorDashboardRoute
+  '/course/$kind/$id': typeof CourseKindIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -78,34 +105,46 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/dashboard'
+    | '/forgot-password'
     | '/profile'
     | '/admin/auth'
     | '/admin/dashboard'
+    | '/mentor/dashboard'
+    | '/course/$kind/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
     | '/dashboard'
+    | '/forgot-password'
     | '/profile'
     | '/admin/auth'
     | '/admin/dashboard'
+    | '/mentor/dashboard'
+    | '/course/$kind/$id'
   id:
     | '__root__'
     | '/'
     | '/auth'
     | '/dashboard'
+    | '/forgot-password'
     | '/profile'
     | '/admin/auth'
     | '/admin/dashboard'
+    | '/mentor/dashboard'
+    | '/course/$kind/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRoute
   DashboardRoute: typeof DashboardRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
   ProfileRoute: typeof ProfileRoute
   AdminAuthRoute: typeof AdminAuthRoute
   AdminDashboardRoute: typeof AdminDashboardRoute
+  MentorDashboardRoute: typeof MentorDashboardRoute
+  CourseKindIdRoute: typeof CourseKindIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -115,6 +154,13 @@ declare module '@tanstack/react-router' {
       path: '/profile'
       fullPath: '/profile'
       preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -138,6 +184,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mentor/dashboard': {
+      id: '/mentor/dashboard'
+      path: '/mentor/dashboard'
+      fullPath: '/mentor/dashboard'
+      preLoaderRoute: typeof MentorDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/dashboard': {
       id: '/admin/dashboard'
       path: '/admin/dashboard'
@@ -152,6 +205,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/course/$kind/$id': {
+      id: '/course/$kind/$id'
+      path: '/course/$kind/$id'
+      fullPath: '/course/$kind/$id'
+      preLoaderRoute: typeof CourseKindIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -159,9 +219,12 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
   DashboardRoute: DashboardRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
   ProfileRoute: ProfileRoute,
   AdminAuthRoute: AdminAuthRoute,
   AdminDashboardRoute: AdminDashboardRoute,
+  MentorDashboardRoute: MentorDashboardRoute,
+  CourseKindIdRoute: CourseKindIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

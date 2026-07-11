@@ -24,6 +24,6 @@ export async function getDb(): Promise<Db> {
   if (db) return db;
   
   // The driver will handle connecting automatically when you request the db context
-  db = client.db("apronboy");
+  db = client.db("Edurack");
   return db;
 }

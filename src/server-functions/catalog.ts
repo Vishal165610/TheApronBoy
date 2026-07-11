@@ -1,0 +1,233 @@
+import { createServerFn } from "@tanstack/react-start";
+import { adminAuth } from "@/lib/firebase-admin";
+import { getDb } from "@/lib/mongo";
+
+// Unlike the admin.ts server functions, these only require a VALID student
+// (or any signed-in) Firebase token — not the admin custom claim. Any
+// logged-in user can browse the catalog; only admins can create/edit it.
+async function requireSignedIn(token: string) {
+  return adminAuth.verifyIdToken(token);
+}
+
+function discountPercent(selling: number, crossed: number): number {
+  if (!crossed || crossed <= 0) return 0;
+  return Math.round(((crossed - selling) / crossed) * 100);
+}
+
+export const listPublicBundles = createServerFn({ method: "GET" })
+  .validator((data: { token: string }) => data)
+  .handler(async ({ data }) => {
+    await requireSignedIn(data.token);
+    const db = await getDb();
+    const rows = await db.collection("bundles").find({}).sort({ createdAt: -1 }).toArray();
+
+    return {
+      bundles: rows.map((r) => ({
+        id: String(r._id),
+        title: r.title as string,
+        track: r.track as string,
+        features: (r.features as string[]) ?? [],
+        sellingPrice: r.sellingPrice as number,
+        crossedPrice: r.crossedPrice as number,
+        discountPercent: discountPercent(r.sellingPrice as number, r.crossedPrice as number),
+        expiryDate: r.expiryDate as string,
+        thumbnailUrl: (r.thumbnailUrl as string | null) ?? null,
+      })),
+    };
+  });
+
+export const listPublicMentorshipBatches = createServerFn({ method: "GET" })
+  .validator((data: { token: string }) => data)
+  .handler(async ({ data }) => {
+    await requireSignedIn(data.token);
+    const db = await getDb();
+
+    const [batches, mentors] = await Promise.all([
+      db.collection("mentorshipBatches").find({}).sort({ createdAt: -1 }).toArray(),
+      db.collection("mentors").find({}, { projection: { name: 1 } }).toArray(),
+    ]);
+
+    const mentorNameById = new Map(mentors.map((m) => [String(m._id), m.name as string]));
+
+    return {
+      batches: batches.map((b) => ({
+        id: String(b._id),
+        name: b.name as string,
+        track: b.track as string,
+        highlights: (b.highlights as string[]) ?? [],
+        sellingPrice: b.sellingPrice as number,
+        crossedPrice: b.crossedPrice as number,
+        discountPercent: discountPercent(b.sellingPrice as number, b.crossedPrice as number),
+        thumbnailUrl: (b.thumbnailUrl as string | null) ?? null,
+        mentorName: b.assignedMentorId ? (mentorNameById.get(b.assignedMentorId as string) ?? null) : null,
+      })),
+    };
+  });
+
+export const getPublicBundle = createServerFn({ method: "GET" })
+  .validator((data: { token: string; id: string }) => data)
+  .handler(async ({ data }) => {
+    await requireSignedIn(data.token);
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+    const r = await db.collection("bundles").findOne({ _id: new ObjectId(data.id) });
+    if (!r) return { bundle: null };
+    return {
+      bundle: {
+        id: String(r._id),
+        title: r.title as string,
+        track: r.track as string,
+        features: (r.features as string[]) ?? [],
+        sellingPrice: r.sellingPrice as number,
+        crossedPrice: r.crossedPrice as number,
+        discountPercent: discountPercent(r.sellingPrice as number, r.crossedPrice as number),
+        expiryDate: r.expiryDate as string,
+        thumbnailUrl: (r.thumbnailUrl as string | null) ?? null,
+        syllabusPdfUrls: (r.syllabusPdfUrls as string[]) ?? [],
+        plannerUrls: (r.plannerUrls as string[]) ?? [],
+      },
+    };
+  });
+
+export const getPublicMentorshipBatch = createServerFn({ method: "GET" })
+  .validator((data: { token: string; id: string }) => data)
+  .handler(async ({ data }) => {
+    await requireSignedIn(data.token);
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+    const r = await db.collection("mentorshipBatches").findOne({ _id: new ObjectId(data.id) });
+    if (!r) return { batch: null };
+
+    let mentor = null;
+    if (r.assignedMentorId) {
+      const m = await db
+        .collection("mentors")
+        .findOne({ _id: new ObjectId(r.assignedMentorId as string) });
+      if (m) {
+        mentor = {
+          name: m.name as string,
+          profilePictureUrl: (m.profilePictureUrl as string | null) ?? null,
+          bio: (m.bio as string) ?? "",
+          credentials: (m.credentials as string) ?? "",
+        };
+      }
+    }
+
+    return {
+      batch: {
+        id: String(r._id),
+        name: r.name as string,
+        track: r.track as string,
+        highlights: (r.highlights as string[]) ?? [],
+        sellingPrice: r.sellingPrice as number,
+        crossedPrice: r.crossedPrice as number,
+        discountPercent: discountPercent(r.sellingPrice as number, r.crossedPrice as number),
+        thumbnailUrl: (r.thumbnailUrl as string | null) ?? null,
+        mentor,
+      },
+    };
+  });
+
+export const listPublicTestsForBundle = createServerFn({ method: "GET" })
+  .validator((data: { token: string; bundleId: string }) => data)
+  .handler(async ({ data }) => {
+    await requireSignedIn(data.token);
+    const db = await getDb();
+    const rows = await db
+      .collection("testCores")
+      .find({ bundleId: data.bundleId })
+      .sort({ liveStart: 1 })
+      .toArray();
+    return {
+      tests: rows.map((r) => ({
+        id: String(r._id),
+        name: r.name as string,
+        totalQuestions: r.totalQuestions as number,
+        timeLimitMinutes: (r.timeLimitMinutes as number) ?? 180,
+        liveStart: r.liveStart as string,
+        liveEnd: r.liveEnd as string,
+      })),
+    };
+  });
+
+export const listPublicBundleAnnouncements = createServerFn({ method: "GET" })
+  .validator((data: { token: string; bundleId: string }) => data)
+  .handler(async ({ data }) => {
+    await requireSignedIn(data.token);
+    const db = await getDb();
+    const now = new Date();
+    const rows = await db
+      .collection("bundleAnnouncements")
+      .find({
+        bundleId: data.bundleId,
+        // Hide announcements scheduled for the future — only show ones
+        // meant to be visible now (no sendAt, or sendAt already passed).
+        $or: [{ sendAt: null }, { sendAt: { $lte: now.toISOString() } }],
+      })
+      .sort({ createdAt: -1 })
+      .toArray();
+    return {
+      announcements: rows.map((r) => ({
+        id: String(r._id),
+        message: (r.message as string | null) ?? null,
+        thumbnailUrl: (r.thumbnailUrl as string | null) ?? null,
+        createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : null,
+      })),
+    };
+  });
+
+// ─── Purchase status (paywall check) ─────────────────────────────────────
+// HONEST GAP: there is no real purchases collection populated by a
+// Razorpay webhook yet, so this will always return isPurchased: false for
+// every item right now. The check itself is real and will start working
+// the moment a webhook handler inserts confirmed-payment documents into
+// `purchases` — no changes needed here when that's built.
+export const checkPurchaseStatus = createServerFn({ method: "POST" })
+  .validator((data: { token: string; itemId: string; itemType: "bundle" | "mentorship" }) => data)
+  .handler(async ({ data }) => {
+    const decoded = await adminAuth.verifyIdToken(data.token);
+    const db = await getDb();
+    const purchase = await db.collection("purchases").findOne({
+      uid: decoded.uid,
+      itemId: data.itemId,
+      itemType: data.itemType,
+      status: "paid",
+    });
+    return { isPurchased: Boolean(purchase) };
+  });
+
+// ─── Request a callback (Overview tab CTA) ───────────────────────────────
+export const submitCallbackRequest = createServerFn({ method: "POST" })
+  .validator((data: { token: string; itemId: string; itemType: "bundle" | "mentorship"; phone: string; preferredTime: string }) => data)
+  .handler(async ({ data }) => {
+    const decoded = await adminAuth.verifyIdToken(data.token);
+    const db = await getDb();
+    await db.collection("callbackRequests").insertOne({
+      uid: decoded.uid,
+      itemId: data.itemId,
+      itemType: data.itemType,
+      phone: data.phone,
+      preferredTime: data.preferredTime,
+      status: "pending",
+      createdAt: new Date(),
+    });
+    return { ok: true };
+  });
+
+// ─── Support tickets (Help tab) ───────────────────────────────────────────
+export const submitSupportTicket = createServerFn({ method: "POST" })
+  .validator((data: { token: string; itemId: string; itemType: "bundle" | "mentorship"; subject: string; message: string }) => data)
+  .handler(async ({ data }) => {
+    const decoded = await adminAuth.verifyIdToken(data.token);
+    const db = await getDb();
+    await db.collection("supportTickets").insertOne({
+      uid: decoded.uid,
+      itemId: data.itemId,
+      itemType: data.itemType,
+      subject: data.subject,
+      message: data.message,
+      status: "open",
+      createdAt: new Date(),
+    });
+    return { ok: true };
+  });

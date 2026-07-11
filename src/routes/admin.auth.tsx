@@ -1,9 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
-import { Loader2, ShieldCheck, Mail, Lock, KeyRound, Eye, EyeOff } from "lucide-react";
+import { Loader2, ShieldCheck, Mail, Lock, KeyRound, Eye, EyeOff, User } from "lucide-react";
 import { auth, firebaseSignIn, firebaseSignUp, signOutUser } from "@/lib/firebase";
 import { useAdminClaim } from "@/lib/use-admin-claim";
 import { verifyAdminAccess } from "@/server-functions/admin";
+import { mentorLogin } from "@/server-functions/mentor-auth";
 
 export const Route = createFileRoute("/admin/auth")({
   head: () => ({
@@ -15,7 +16,12 @@ export const Route = createFileRoute("/admin/auth")({
   component: AdminAuthPage,
 });
 
-type Tab = "signin" | "signup";
+// Key used to store the mentor's signed session token client-side. The
+// (future) mentor dashboard reads this and calls getMentorSession to verify
+// it and load the mentor's profile.
+const MENTOR_SESSION_KEY = "mentor_session_token";
+
+type Tab = "signin" | "signup" | "mentor";
 
 function AdminAuthPage() {
   const { adminUser, isAdmin, loading } = useAdminClaim();
@@ -35,6 +41,13 @@ function AdminAuthPage() {
       </div>
     );
   }
+
+  const heading =
+    tab === "signin" ? "Admin sign in" : tab === "signup" ? "Register admin account" : "Mentor sign in";
+  const subheading =
+    tab === "mentor"
+      ? "Sign in with the username and password given to you by an admin."
+      : "Restricted access. A valid security passkey is required.";
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--admin-bg,inherit)]">
@@ -56,31 +69,38 @@ function AdminAuthPage() {
         <div className="clay w-full p-5 sm:p-8">
           <div className="mb-6 text-center">
             <h1 className="font-display text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-              {tab === "signin" ? "Admin sign in" : "Register admin account"}
+              {heading}
             </h1>
-            <p className="mt-1 text-sm text-foreground/60">
-              Restricted access. A valid security passkey is required.
-            </p>
+            <p className="mt-1 text-sm text-foreground/60">{subheading}</p>
           </div>
 
-          <div className="clay-inset mx-auto mb-6 grid max-w-xs grid-cols-2 gap-1 p-1">
+          <div className="clay-inset mx-auto mb-6 grid max-w-xs grid-cols-3 gap-1 p-1">
             <button
               type="button"
               onClick={() => setTab("signin")}
-              className={`rounded-full py-2 text-sm font-semibold transition-all ${tab === "signin" ? "clay-btn text-white" : "text-foreground/70 hover:text-foreground"}`}
+              className={`rounded-full py-2 text-xs font-semibold transition-all ${tab === "signin" ? "clay-btn text-white" : "text-foreground/70 hover:text-foreground"}`}
             >
               Sign In
             </button>
             <button
               type="button"
               onClick={() => setTab("signup")}
-              className={`rounded-full py-2 text-sm font-semibold transition-all ${tab === "signup" ? "clay-btn text-white" : "text-foreground/70 hover:text-foreground"}`}
+              className={`rounded-full py-2 text-xs font-semibold transition-all ${tab === "signup" ? "clay-btn text-white" : "text-foreground/70 hover:text-foreground"}`}
             >
               Register
             </button>
+            <button
+              type="button"
+              onClick={() => setTab("mentor")}
+              className={`rounded-full py-2 text-xs font-semibold transition-all ${tab === "mentor" ? "clay-btn text-white" : "text-foreground/70 hover:text-foreground"}`}
+            >
+              Mentor
+            </button>
           </div>
 
-          {tab === "signin" ? <AdminSignInForm /> : <AdminSignUpForm />}
+          {tab === "signin" && <AdminSignInForm />}
+          {tab === "signup" && <AdminSignUpForm />}
+          {tab === "mentor" && <MentorSignInForm />}
         </div>
 
         <p className="mt-6 max-w-sm text-center text-xs text-foreground/50">
@@ -112,6 +132,17 @@ function friendlyAdminError(err: unknown): string {
     default:
       return "Something went wrong. Please try again.";
   }
+}
+
+function friendlyMentorError(err: unknown): string {
+  const message = (err as { message?: string })?.message ?? "";
+  if (message.includes("MENTOR_SESSION_SECRET")) {
+    return "Mentor login is not configured yet. Contact the developer.";
+  }
+  if (message.includes("Incorrect username or password") || message.includes("Invalid username or password")) {
+    return "Incorrect username or password.";
+  }
+  return "Something went wrong. Please try again.";
 }
 
 function ClayInput({
@@ -152,10 +183,8 @@ function AdminSignInForm() {
       await verifyAdminAccess({ data: { token, passkey } });
       // Force-refresh so the token now carries the admin claim.
       await auth.currentUser!.getIdToken(true);
-      console.log("Admin sign-in succeeded, navigating to /admin/dashboard");
       navigate({ to: "/admin/dashboard" });
     } catch (err) {
-      console.error("Admin sign-in error:", err);
       setError(friendlyAdminError(err));
       // If the passkey was wrong, don't leave an authenticated-but-
       // unauthorized session sitting around.
@@ -239,10 +268,8 @@ function AdminSignUpForm() {
       const token = await auth.currentUser!.getIdToken();
       await verifyAdminAccess({ data: { token, passkey } });
       await auth.currentUser!.getIdToken(true);
-      console.log("Admin sign-up succeeded, navigating to /admin/dashboard");
       navigate({ to: "/admin/dashboard" });
     } catch (err) {
-      console.error("Admin sign-up error:", err);
       setError(friendlyAdminError(err));
       if (auth.currentUser) await signOutUser();
     } finally {
@@ -298,6 +325,84 @@ function AdminSignUpForm() {
         className="clay-btn flex w-full items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold disabled:opacity-70"
       >
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Register & Enter"}
+      </button>
+    </form>
+  );
+}
+
+// ─── Mentor sign in ───────────────────────────────────────────────────────
+// Mentors are NOT Firebase users — they were onboarded directly into
+// MongoDB with a username/hashed-password pair (Module 6). So this form
+// bypasses Firebase entirely and calls mentorLogin, which checks the
+// credentials against MongoDB and returns a signed HMAC session token. That
+// token is stored client-side and is what the (future) mentor dashboard
+// will read to confirm the session and load the mentor's profile.
+function MentorSignInForm() {
+  const navigate = useNavigate();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [show, setShow] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!username.trim() || !password) {
+      setError("Enter your username and password.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const result = await mentorLogin({ data: { username: username.trim(), password } });
+      localStorage.setItem(MENTOR_SESSION_KEY, result.token);
+      navigate({ to: "/mentor/dashboard" });
+    } catch (err) {
+      setError(friendlyMentorError(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+      <ClayInput
+        icon={<User className="h-4 w-4" />}
+        type="text"
+        placeholder="Username"
+        value={username}
+        onChange={(e) => setUsername(e.target.value)}
+        autoComplete="username"
+        required
+      />
+      <div className="clay-inset flex items-center gap-3 px-4 py-3 focus-within:ring-2 focus-within:ring-[var(--sky-deep)]/40">
+        <Lock className="h-4 w-4 text-foreground/50" />
+        <input
+          type={show ? "text" : "password"}
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="current-password"
+          required
+          className="w-full bg-transparent text-sm text-foreground placeholder:text-foreground/40 focus:outline-none"
+        />
+        <button type="button" onClick={() => setShow((s) => !s)} className="text-foreground/50 hover:text-foreground">
+          {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
+      </div>
+
+      {error && (
+        <p className="rounded-2xl bg-[var(--coral-soft)]/50 px-4 py-2 text-xs font-medium text-foreground">
+          {error}
+        </p>
+      )}
+
+      <button
+        type="submit"
+        disabled={loading}
+        className="clay-btn flex w-full items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold disabled:opacity-70"
+      >
+        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign in as Mentor"}
       </button>
     </form>
   );

@@ -19,6 +19,7 @@ import {
   Package,
   ClipboardList,
   ListChecks,
+  Search,
 } from "lucide-react";
 import { useAdminClaim } from "@/lib/use-admin-claim";
 import { signOutUser } from "@/lib/firebase";
@@ -34,6 +35,8 @@ import {
 import { BundleCreationModule, BundleManagementModule } from "@/components/bundle-modules";
 import { TestCoreModule } from "@/components/test-core-module";
 import { QuestionIngestionModule } from "@/components/question-ingestion-module";
+import { BundleInspectorModule } from "@/components/bundle-inspector-module";
+import { MentorHubModule } from "@/components/mentor-hub-module";
 
 export const Route = createFileRoute("/admin/dashboard")({
   head: () => ({
@@ -51,6 +54,7 @@ type ModuleKey =
   | "bundleManage"
   | "testCore"
   | "questions"
+  | "inspector"
   | "tests"
   | "students"
   | "mentors"
@@ -62,6 +66,7 @@ const MODULES: { key: ModuleKey; label: string; icon: typeof LayoutDashboard }[]
   { key: "bundleManage", label: "Manage Bundles", icon: Megaphone },
   { key: "testCore", label: "Test Core", icon: ClipboardList },
   { key: "questions", label: "Questions", icon: ListChecks },
+  { key: "inspector", label: "Inspector", icon: Search },
   { key: "tests", label: "Test Series", icon: FileText },
   { key: "students", label: "Students", icon: Users },
   { key: "mentors", label: "Mentors", icon: GraduationCap },
@@ -149,9 +154,10 @@ function AdminDashboardPage() {
           {activeModule === "bundleManage" && <BundleManagementModule adminUser={adminUser} />}
           {activeModule === "testCore" && <TestCoreModule adminUser={adminUser} />}
           {activeModule === "questions" && <QuestionIngestionModule adminUser={adminUser} />}
+          {activeModule === "inspector" && <BundleInspectorModule adminUser={adminUser} />}
           {activeModule === "tests" && <TestSeriesModule adminUser={adminUser} />}
           {activeModule === "students" && <StudentsModule adminUser={adminUser} />}
-          {activeModule === "mentors" && <MentorsModule />}
+          {activeModule === "mentors" && <MentorHubModule adminUser={adminUser} />}
           {activeModule === "announcements" && <AnnouncementsModule adminUser={adminUser} />}
         </div>
       </main>
@@ -544,22 +550,8 @@ function StudentsModule({ adminUser }: { adminUser: { getIdToken: () => Promise<
 }
 
 // ─── Module 4: Mentor Allocation & Schedule Hub ─────────────────────────────
-function MentorsModule() {
-  return (
-    <div>
-      <ModuleHeader title="Mentor Allocation & Schedule Hub" subtitle="Assign mentors and manage session scheduling." />
-      <div className="clay p-8 text-center">
-        <GraduationCap className="mx-auto mb-3 h-8 w-8 text-foreground/30" />
-        <p className="font-display text-base font-bold text-foreground">Coming soon</p>
-        <p className="mx-auto mt-2 max-w-md text-sm text-foreground/60">
-          This module needs a mentors collection, a batch-assignment model, and Google Calendar
-          / Meet integration before it can show real data. Rather than show fabricated mentor
-          names or schedules, this space is left empty until those pieces exist.
-        </p>
-      </div>
-    </div>
-  );
-}
+// (Replaced by MentorHubModule in @/components/mentor-hub-module — mentor
+// onboarding, profile editing, and mentorship batches are now real.)
 
 // ─── Module 5: Announcement Broadcast ───────────────────────────────────────
 type AnnouncementRow = {

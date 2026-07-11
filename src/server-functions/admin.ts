@@ -1,14 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
+import { adminAuth } from "@/lib/firebase-admin";
 import { getDb } from "@/lib/mongo";
+import { scryptSync, randomBytes } from "node:crypto";
 
 // ─── Authorization helper ────────────────────────────────────────────────
 // Every admin-only server function below calls this first. It verifies the
 // Firebase ID token AND checks for the `admin: true` custom claim baked into
-// that token.
+// that token. Claims only appear in tokens minted/refreshed after promotion,
+// so the client must force-refresh (getIdToken(true)) right after being
+// granted admin access.
 async function requireAdmin(token: string) {
-  // Dynamically import to keep Vite from breaking nested ESM dependencies
-  const { adminAuth } = await import("@/lib/firebase-admin");
-  
   const decoded = await adminAuth.verifyIdToken(token);
   if (decoded.admin !== true) {
     throw new Error("Forbidden: admin access required");
@@ -18,7 +19,10 @@ async function requireAdmin(token: string) {
 
 // ─── Admin auth / claim bootstrap ────────────────────────────────────────
 // Called after every admin sign-in or sign-up. Checks the shared passkey
-// (ADMIN_PASSKEY env var) as a second factor.
+// (ADMIN_PASSKEY env var) as a second factor. If the passkey is correct and
+// the user isn't already an admin, this is what actually grants the
+// `admin: true` custom claim for the first time — i.e. this IS the
+// "become an admin" moment, gated entirely by knowing the passkey.
 export const verifyAdminAccess = createServerFn({ method: "POST" })
   .validator((data: { token: string; passkey: string }) => data)
   .handler(async ({ data }) => {
@@ -29,9 +33,6 @@ export const verifyAdminAccess = createServerFn({ method: "POST" })
     if (data.passkey !== expected) {
       throw new Error("Invalid passkey");
     }
-
-    // Dynamically import adminAuth here as well
-    const { adminAuth } = await import("@/lib/firebase-admin");
 
     const decoded = await adminAuth.verifyIdToken(data.token);
     if (decoded.admin === true) {
@@ -51,6 +52,10 @@ export const getAdminAnalytics = createServerFn({ method: "GET" })
 
     const totalStudents = await db.collection("profiles").countDocuments();
 
+    // These three don't have a real data source wired up yet — no
+    // testAttempts / mentorshipSlots / purchases collections exist, and
+    // there's no Razorpay sync. Returning null (rendered as "—" in the UI)
+    // rather than a fabricated number.
     return {
       totalStudents,
       activeMentorshipSessions: null as number | null,
@@ -94,6 +99,8 @@ export const listStudents = createServerFn({ method: "GET" })
     };
   });
 
+// Admin-privileged lookup of another user's device sessions (for the
+// "view logged-in devices" action in the Student Directory).
 export const adminListDevicesForUser = createServerFn({ method: "POST" })
   .validator((data: { token: string; uid: string }) => data)
   .handler(async ({ data }) => {
@@ -132,6 +139,8 @@ export const createTestSeries = createServerFn({ method: "POST" })
     await db.collection("testSeries").insertOne({
       ...data.testSeries,
       createdAt: new Date(),
+      // CBT engine mapping is not built yet — this flag just records intent
+      // so the future engine-sync job knows which rows still need mapping.
       cbtEngineSynced: false,
     });
     return { ok: true };
@@ -225,6 +234,11 @@ export const updateBundle = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+// Targeted announcement tied to a specific bundle. NOTE: this stores the
+// intent (send to buyers of this bundle) but doesn't yet actually filter
+// recipients by purchase — there's no `purchases` collection with real
+// Razorpay-confirmed orders wired up yet. Once that exists, a delivery job
+// can read bundleId here and resolve it to actual recipient uids.
 type BundleAnnouncementInput = {
   bundleId: string;
   message: string | null;
@@ -267,7 +281,7 @@ export const listBundleAnnouncements = createServerFn({ method: "GET" })
     };
   });
 
-// ─── Module 3: Test Core ───────────────────────────────────────────────────
+// ─── Module 3: Test Core (tests nested inside a bundle) ─────────────────────
 type SubjectWeightageInput = { subject: string; questionCount: number };
 
 type TestCoreInput = {
@@ -332,32 +346,6 @@ export const updateTestCore = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// ─── Module 4: Question Ingestion Engine ────────────────────────────────────
-type QuestionInput = {
-  bundleId: string;
-  testId: string;
-  subject: string;
-  questionNo: number;
-  body: string;
-  options: { A: string; B: string; C: string; D: string };
-  correctOption: "A" | "B" | "C" | "D";
-  solution: string;
-  difficulty: "Easy" | "Medium" | "Hard";
-  isPYQ: boolean;
-  pyqYear?: string;
-};
-
-export const createQuestion = createServerFn({ method: "POST" })
-  .validator((data: { token: string; question: QuestionInput }) => data)
-  .handler(async ({ data }) => {
-    await requireAdmin(data.token);
-    const db = await getDb();
-    const result = await db.collection("questions").insertOne({
-      ...data.question,
-      createdAt: new Date(),
-    });
-    return { ok: true, id: String(result.insertedId) };
-  });
 
 export const listQuestions = createServerFn({ method: "GET" })
   .validator((data: { token: string; bundleId: string; testId: string; subject: string }) => data)
@@ -386,6 +374,35 @@ export const listQuestions = createServerFn({ method: "GET" })
         createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : null,
       })),
     };
+  });
+
+
+
+// ─── Module 4: Question Ingestion ───────────────────────────────────────────
+type QuestionInput = {
+  bundleId: string;
+  testId: string;
+  subject: string;
+  questionNo: number;
+  body: string;
+  options: { A: string; B: string; C: string; D: string };
+  correctOption: "A" | "B" | "C" | "D";
+  solution: string;
+  difficulty: "Easy" | "Medium" | "Hard";
+  isPYQ: boolean;
+  pyqYear?: string;
+};
+
+export const createQuestion = createServerFn({ method: "POST" })
+  .validator((data: { token: string; question: QuestionInput }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin(data.token);
+    const db = await getDb();
+    const result = await db.collection("questions").insertOne({
+      ...data.question,
+      createdAt: new Date(),
+    });
+    return { ok: true, id: String(result.insertedId) };
   });
 
 export const listQuestionsForTestSubject = createServerFn({ method: "GET" })
@@ -417,6 +434,20 @@ export const listQuestionsForTestSubject = createServerFn({ method: "GET" })
     };
   });
 
+
+export const updateQuestion = createServerFn({ method: "POST" })
+  .validator((data: { token: string; id: string; question: Partial<QuestionInput> }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin(data.token);
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+    await db.collection("questions").updateOne(
+      { _id: new ObjectId(data.id) },
+      { $set: { ...data.question } },
+    );
+    return { ok: true };
+  });
+
 export const listQuestionsForTest = createServerFn({ method: "GET" })
   .validator((data: { token: string; testId: string }) => data)
   .handler(async ({ data }) => {
@@ -446,20 +477,149 @@ export const listQuestionsForTest = createServerFn({ method: "GET" })
     };
   });
 
-export const updateQuestion = createServerFn({ method: "POST" })
-  .validator((data: { token: string; id: string; question: Partial<QuestionInput> }) => data)
+
+export const deleteQuestion = createServerFn({ method: "POST" })
+  .validator((data: { token: string; id: string }) => data)
   .handler(async ({ data }) => {
     await requireAdmin(data.token);
     const { ObjectId } = await import("mongodb");
     const db = await getDb();
-    await db.collection("questions").updateOne(
+    await db.collection("questions").deleteOne({ _id: new ObjectId(data.id) });
+    return { ok: true };
+  });
+
+// ─── Module 6: Mentor Allocation & Schedule Hub ─────────────────────────────
+
+function hashPassword(password: string): { hash: string; salt: string } {
+  const salt = randomBytes(16).toString("hex");
+  const hash = scryptSync(password, salt, 64).toString("hex");
+  return { hash, salt };
+}
+
+type MentorOnboardingInput = {
+  username: string;
+  password: string;
+  secretCode: string;
+  name: string;
+};
+
+export const createMentor = createServerFn({ method: "POST" })
+  .validator((data: { token: string; mentor: MentorOnboardingInput }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin(data.token);
+    const db = await getDb();
+
+    const existing = await db.collection("mentors").findOne({ username: data.mentor.username });
+    if (existing) throw new Error("A mentor with this username already exists.");
+
+    // Password is hashed here, never stored or returned in plain text — even
+    // though there's no mentor login flow consuming it yet, storing
+    // plaintext passwords is a bad habit to start regardless.
+    const { hash, salt } = hashPassword(data.mentor.password);
+
+    const result = await db.collection("mentors").insertOne({
+      username: data.mentor.username,
+      name: data.mentor.name,
+      secretCode: data.mentor.secretCode,
+      passwordHash: hash,
+      passwordSalt: salt,
+      profilePictureUrl: null,
+      trackingIndex: "",
+      createdAt: new Date(),
+    });
+    return { ok: true, id: String(result.insertedId) };
+  });
+
+export const listMentors = createServerFn({ method: "GET" })
+  .validator((data: { token: string }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin(data.token);
+    const db = await getDb();
+    const rows = await db.collection("mentors").find({}).sort({ createdAt: -1 }).toArray();
+    return {
+      // Deliberately excludes passwordHash/passwordSalt — never sent to the client.
+      mentors: rows.map((r) => ({
+        id: String(r._id),
+        username: r.username as string,
+        name: r.name as string,
+        secretCode: r.secretCode as string,
+        profilePictureUrl: (r.profilePictureUrl as string | null) ?? null,
+        trackingIndex: (r.trackingIndex as string) ?? "",
+        createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : null,
+      })),
+    };
+  });
+
+export const updateMentorProfile = createServerFn({ method: "POST" })
+  .validator(
+    (data: { token: string; id: string; profile: { name: string; profilePictureUrl: string | null; trackingIndex: string } }) =>
+      data,
+  )
+  .handler(async ({ data }) => {
+    await requireAdmin(data.token);
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+    await db.collection("mentors").updateOne({ _id: new ObjectId(data.id) }, { $set: data.profile });
+    return { ok: true };
+  });
+
+type MentorshipBatchInput = {
+  thumbnailUrl: string | null;
+  name: string;
+  highlights: string[];
+  track: "11th" | "12th" | "Dropper";
+  sellingPrice: number;
+  crossedPrice: number;
+  assignedMentorId: string | null;
+};
+
+export const createMentorshipBatch = createServerFn({ method: "POST" })
+  .validator((data: { token: string; batch: MentorshipBatchInput }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin(data.token);
+    const db = await getDb();
+    const result = await db.collection("mentorshipBatches").insertOne({
+      ...data.batch,
+      createdAt: new Date(),
+    });
+    return { ok: true, id: String(result.insertedId) };
+  });
+
+export const listMentorshipBatches = createServerFn({ method: "GET" })
+  .validator((data: { token: string }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin(data.token);
+    const db = await getDb();
+    const rows = await db.collection("mentorshipBatches").find({}).sort({ createdAt: -1 }).toArray();
+    return {
+      batches: rows.map((r) => ({
+        id: String(r._id),
+        thumbnailUrl: (r.thumbnailUrl as string | null) ?? null,
+        name: r.name as string,
+        highlights: (r.highlights as string[]) ?? [],
+        track: r.track as string,
+        sellingPrice: r.sellingPrice as number,
+        crossedPrice: r.crossedPrice as number,
+        assignedMentorId: (r.assignedMentorId as string | null) ?? null,
+        createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : null,
+      })),
+    };
+  });
+
+export const updateMentorshipBatch = createServerFn({ method: "POST" })
+  .validator((data: { token: string; id: string; batch: Partial<MentorshipBatchInput> }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin(data.token);
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+    await db.collection("mentorshipBatches").updateOne(
       { _id: new ObjectId(data.id) },
-      { $set: { ...data.question } },
+      { $set: { ...data.batch } },
     );
     return { ok: true };
   });
 
-// ─── Module 5: Announcement Broadcast ────────────────────────────────────
+// ─── Global Announcement Broadcast (platform-wide, non-bundle-specific) ──
 type AnnouncementTrack = "All" | "Dropper" | "11th" | "12th";
 
 export const postAnnouncement = createServerFn({ method: "POST" })
