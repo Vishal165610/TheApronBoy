@@ -96,9 +96,8 @@ export const listPublicTestsForBundle = createServerFn({ method: "GET" })
         id: String(r._id),
         name: r.name as string,
         totalQuestions: r.totalQuestions as number,
-        timeLimitMinutes: Math.round(
-          (new Date(r.liveEnd as string).getTime() - new Date(r.liveStart as string).getTime()) / 60000,
-        ),
+        timeLimitMinutes: (r.timeLimitMinutes as number) ?? 180,
+        subjects: (r.subjects as string[]) ?? [],
         liveStart: r.liveStart as string,
         liveEnd: r.liveEnd as string,
       })),

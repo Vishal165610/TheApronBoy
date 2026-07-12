@@ -14,6 +14,7 @@ import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as TestTestIdRouteImport } from './routes/test.$testId'
 import { Route as MentorDashboardRouteImport } from './routes/mentor.dashboard'
 import { Route as AdminDashboardRouteImport } from './routes/admin.dashboard'
 import { Route as AdminAuthRouteImport } from './routes/admin.auth'
@@ -42,6 +43,11 @@ const AuthRoute = AuthRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TestTestIdRoute = TestTestIdRouteImport.update({
+  id: '/test/$testId',
+  path: '/test/$testId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MentorDashboardRoute = MentorDashboardRouteImport.update({
@@ -74,6 +80,7 @@ export interface FileRoutesByFullPath {
   '/admin/auth': typeof AdminAuthRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/mentor/dashboard': typeof MentorDashboardRoute
+  '/test/$testId': typeof TestTestIdRoute
   '/course/$kind/$id': typeof CourseKindIdRoute
 }
 export interface FileRoutesByTo {
@@ -85,6 +92,7 @@ export interface FileRoutesByTo {
   '/admin/auth': typeof AdminAuthRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/mentor/dashboard': typeof MentorDashboardRoute
+  '/test/$testId': typeof TestTestIdRoute
   '/course/$kind/$id': typeof CourseKindIdRoute
 }
 export interface FileRoutesById {
@@ -97,6 +105,7 @@ export interface FileRoutesById {
   '/admin/auth': typeof AdminAuthRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/mentor/dashboard': typeof MentorDashboardRoute
+  '/test/$testId': typeof TestTestIdRoute
   '/course/$kind/$id': typeof CourseKindIdRoute
 }
 export interface FileRouteTypes {
@@ -110,6 +119,7 @@ export interface FileRouteTypes {
     | '/admin/auth'
     | '/admin/dashboard'
     | '/mentor/dashboard'
+    | '/test/$testId'
     | '/course/$kind/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -121,6 +131,7 @@ export interface FileRouteTypes {
     | '/admin/auth'
     | '/admin/dashboard'
     | '/mentor/dashboard'
+    | '/test/$testId'
     | '/course/$kind/$id'
   id:
     | '__root__'
@@ -132,6 +143,7 @@ export interface FileRouteTypes {
     | '/admin/auth'
     | '/admin/dashboard'
     | '/mentor/dashboard'
+    | '/test/$testId'
     | '/course/$kind/$id'
   fileRoutesById: FileRoutesById
 }
@@ -144,6 +156,7 @@ export interface RootRouteChildren {
   AdminAuthRoute: typeof AdminAuthRoute
   AdminDashboardRoute: typeof AdminDashboardRoute
   MentorDashboardRoute: typeof MentorDashboardRoute
+  TestTestIdRoute: typeof TestTestIdRoute
   CourseKindIdRoute: typeof CourseKindIdRoute
 }
 
@@ -182,6 +195,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/test/$testId': {
+      id: '/test/$testId'
+      path: '/test/$testId'
+      fullPath: '/test/$testId'
+      preLoaderRoute: typeof TestTestIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mentor/dashboard': {
@@ -224,6 +244,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminAuthRoute: AdminAuthRoute,
   AdminDashboardRoute: AdminDashboardRoute,
   MentorDashboardRoute: MentorDashboardRoute,
+  TestTestIdRoute: TestTestIdRoute,
   CourseKindIdRoute: CourseKindIdRoute,
 }
 export const routeTree = rootRouteImport

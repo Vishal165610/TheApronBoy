@@ -605,7 +605,7 @@ function TestsTab({
               </div>
               <button
                 disabled={!isPurchased}
-                onClick={() => navigate({ to: "/" })}
+                onClick={() => navigate({ to: "/test/$testId", params: { testId: t.id } })}
                 className="clay-btn flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold disabled:opacity-40"
               >
                 <PlayCircle className="h-4 w-4" />
@@ -615,12 +615,6 @@ function TestsTab({
           </LockGate>
         );
       })}
-      {isPurchased && (
-        <p className="text-xs text-foreground/40">
-          "Start Test" currently links back home — the 1:1 NTA replica engine it should redirect
-          into hasn't been built yet.
-        </p>
-      )}
     </div>
   );
 }
