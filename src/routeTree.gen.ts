@@ -15,6 +15,7 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TestTestIdRouteImport } from './routes/test.$testId'
+import { Route as TestResultAttemptIdRouteImport } from './routes/test-result.$attemptId'
 import { Route as MentorDashboardRouteImport } from './routes/mentor.dashboard'
 import { Route as AdminDashboardRouteImport } from './routes/admin.dashboard'
 import { Route as AdminAuthRouteImport } from './routes/admin.auth'
@@ -50,6 +51,11 @@ const TestTestIdRoute = TestTestIdRouteImport.update({
   path: '/test/$testId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TestResultAttemptIdRoute = TestResultAttemptIdRouteImport.update({
+  id: '/test-result/$attemptId',
+  path: '/test-result/$attemptId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MentorDashboardRoute = MentorDashboardRouteImport.update({
   id: '/mentor/dashboard',
   path: '/mentor/dashboard',
@@ -80,6 +86,7 @@ export interface FileRoutesByFullPath {
   '/admin/auth': typeof AdminAuthRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/mentor/dashboard': typeof MentorDashboardRoute
+  '/test-result/$attemptId': typeof TestResultAttemptIdRoute
   '/test/$testId': typeof TestTestIdRoute
   '/course/$kind/$id': typeof CourseKindIdRoute
 }
@@ -92,6 +99,7 @@ export interface FileRoutesByTo {
   '/admin/auth': typeof AdminAuthRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/mentor/dashboard': typeof MentorDashboardRoute
+  '/test-result/$attemptId': typeof TestResultAttemptIdRoute
   '/test/$testId': typeof TestTestIdRoute
   '/course/$kind/$id': typeof CourseKindIdRoute
 }
@@ -105,6 +113,7 @@ export interface FileRoutesById {
   '/admin/auth': typeof AdminAuthRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/mentor/dashboard': typeof MentorDashboardRoute
+  '/test-result/$attemptId': typeof TestResultAttemptIdRoute
   '/test/$testId': typeof TestTestIdRoute
   '/course/$kind/$id': typeof CourseKindIdRoute
 }
@@ -119,6 +128,7 @@ export interface FileRouteTypes {
     | '/admin/auth'
     | '/admin/dashboard'
     | '/mentor/dashboard'
+    | '/test-result/$attemptId'
     | '/test/$testId'
     | '/course/$kind/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -131,6 +141,7 @@ export interface FileRouteTypes {
     | '/admin/auth'
     | '/admin/dashboard'
     | '/mentor/dashboard'
+    | '/test-result/$attemptId'
     | '/test/$testId'
     | '/course/$kind/$id'
   id:
@@ -143,6 +154,7 @@ export interface FileRouteTypes {
     | '/admin/auth'
     | '/admin/dashboard'
     | '/mentor/dashboard'
+    | '/test-result/$attemptId'
     | '/test/$testId'
     | '/course/$kind/$id'
   fileRoutesById: FileRoutesById
@@ -156,6 +168,7 @@ export interface RootRouteChildren {
   AdminAuthRoute: typeof AdminAuthRoute
   AdminDashboardRoute: typeof AdminDashboardRoute
   MentorDashboardRoute: typeof MentorDashboardRoute
+  TestResultAttemptIdRoute: typeof TestResultAttemptIdRoute
   TestTestIdRoute: typeof TestTestIdRoute
   CourseKindIdRoute: typeof CourseKindIdRoute
 }
@@ -204,6 +217,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TestTestIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/test-result/$attemptId': {
+      id: '/test-result/$attemptId'
+      path: '/test-result/$attemptId'
+      fullPath: '/test-result/$attemptId'
+      preLoaderRoute: typeof TestResultAttemptIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/mentor/dashboard': {
       id: '/mentor/dashboard'
       path: '/mentor/dashboard'
@@ -244,6 +264,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminAuthRoute: AdminAuthRoute,
   AdminDashboardRoute: AdminDashboardRoute,
   MentorDashboardRoute: MentorDashboardRoute,
+  TestResultAttemptIdRoute: TestResultAttemptIdRoute,
   TestTestIdRoute: TestTestIdRoute,
   CourseKindIdRoute: CourseKindIdRoute,
 }
