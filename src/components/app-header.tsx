@@ -40,8 +40,8 @@ export function AppHeader({ user, displayName }: { user: User; displayName?: str
       {/* Center: Branding */}
       <div className="flex items-center justify-center">
         <img
-          src="/logo-black.png"
-          alt="The Apron Boy"
+          src="https://i.postimg.cc/WztCwkGB/Edurack.jpg"
+          alt="Edurack"
           className="h-7 w-auto object-contain sm:h-8"
           onError={(e) => {
             (e.currentTarget as HTMLImageElement).style.display = "none";

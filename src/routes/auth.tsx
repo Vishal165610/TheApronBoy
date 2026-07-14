@@ -145,8 +145,8 @@ function AuthPage() {
         <div className="mb-6 flex flex-col items-center gap-3">
           <div className="clay flex h-16 w-16 items-center justify-center p-2">
             <img
-              src="https://yt3.googleusercontent.com/qdo1xrlhfa82iLMS4yqWLJtgFt4-jizxXkvR_6HuYzYIv65nN0zg3-J3YDEwRK405xh_ASSgtQ=s160-c-k-c0x00ffffff-no-rj"
-              alt="The Apron Boy"
+              src="https://i.postimg.cc/WztCwkGB/Edurack.jpg"
+              alt="Edurack"
               className="h-full w-full object-contain"
               onError={(e) => {
                 (e.currentTarget as HTMLImageElement).style.display = "none";

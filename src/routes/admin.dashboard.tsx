@@ -41,7 +41,7 @@ import { MentorHubModule } from "@/components/mentor-hub-module";
 export const Route = createFileRoute("/admin/dashboard")({
   head: () => ({
     meta: [
-      { title: "Admin Command Center · The Apron Boy" },
+      { title: "Admin Command Center · Edurack" },
       { name: "robots", content: "noindex" },
     ],
   }),

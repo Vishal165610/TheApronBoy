@@ -92,7 +92,138 @@ export const getTestAttempt = createServerFn({ method: "GET" })
     };
   });
 
-// ─── Leaderboard for a test (ranked by each student's BEST attempt) ────────
+// ─── This student's own attempts on a test (for the course hub + analysis) ─
+export const listMyAttemptsForTest = createServerFn({ method: "GET" })
+  .validator((data: { token: string; testId: string }) => data)
+  .handler(async ({ data }) => {
+    const decoded = await requireSignedIn(data.token);
+    const db = await getDb();
+    const rows = await db
+      .collection("testAttempts")
+      .find({ uid: decoded.uid, testId: data.testId })
+      .sort({ attemptNumber: 1 })
+      .toArray();
+
+    return {
+      attempts: rows.map((r) => ({
+        id: String(r._id),
+        attemptNumber: r.attemptNumber as number,
+        score: r.score as number,
+        totalMarks: r.totalMarks as number,
+        timeTakenMinutes: r.timeTakenMinutes as number,
+        submittedAt: r.submittedAt instanceof Date ? r.submittedAt.toISOString() : null,
+      })),
+    };
+  });
+
+// ─── Full cross-attempt analysis: trend, subject accuracy, recurring mistakes ─
+export const getTestAnalysis = createServerFn({ method: "GET" })
+  .validator((data: { token: string; testId: string }) => data)
+  .handler(async ({ data }) => {
+    const decoded = await requireSignedIn(data.token);
+    const db = await getDb();
+
+    const attempts = await db
+      .collection("testAttempts")
+      .find({ uid: decoded.uid, testId: data.testId })
+      .sort({ attemptNumber: 1 })
+      .toArray();
+
+    if (attempts.length === 0) {
+      return { testName: null, attempts: [], subjectAccuracy: [], recurringMistakes: [] };
+    }
+
+    const testName = attempts[0].testName as string;
+
+    // Aggregate subject-wise totals across every attempt, not just the
+    // latest — a student who's always weak in Chemistry should see that
+    // pattern, not just their most recent single result.
+    const subjectTotals = new Map<string, { correct: number; incorrect: number; unanswered: number }>();
+    // Per-question tally across all attempts, to surface "you keep getting
+    // this one wrong" rather than just "you got X questions wrong once."
+    const questionTally = new Map<string, { wrongCount: number; totalSeen: number; subject: string }>();
+
+    for (const a of attempts) {
+      const breakdown = (a.subjectBreakdown ?? []) as { subject: string; correct: number; incorrect: number; unanswered: number }[];
+      for (const s of breakdown) {
+        const t = subjectTotals.get(s.subject) ?? { correct: 0, incorrect: 0, unanswered: 0 };
+        t.correct += s.correct;
+        t.incorrect += s.incorrect;
+        t.unanswered += s.unanswered;
+        subjectTotals.set(s.subject, t);
+      }
+
+      const results = (a.questionResults ?? []) as {
+        questionId: string;
+        subject: string;
+        isCorrect: boolean;
+      }[];
+      for (const r of results) {
+        const t = questionTally.get(r.questionId) ?? { wrongCount: 0, totalSeen: 0, subject: r.subject };
+        t.totalSeen += 1;
+        if (!r.isCorrect) t.wrongCount += 1;
+        questionTally.set(r.questionId, t);
+      }
+    }
+
+    const subjectAccuracy = Array.from(subjectTotals.entries()).map(([subject, t]) => {
+      const attempted = t.correct + t.incorrect;
+      return {
+        subject,
+        correct: t.correct,
+        incorrect: t.incorrect,
+        unanswered: t.unanswered,
+        accuracyPercent: attempted > 0 ? Math.round((t.correct / attempted) * 100) : 0,
+      };
+    });
+
+    // "Recurring mistakes" — questions gotten wrong at least once, ranked by
+    // how often they're wrong. Only worth surfacing across 2+ attempts;
+    // with a single attempt this just lists everything missed once.
+    const worstQuestionIds = Array.from(questionTally.entries())
+      .filter(([, t]) => t.wrongCount > 0)
+      .sort((a, b) => b[1].wrongCount / b[1].totalSeen - a[1].wrongCount / a[1].totalSeen)
+      .slice(0, 8)
+      .map(([id]) => id);
+
+    const { ObjectId } = await import("mongodb");
+    const questionDocs = await db
+      .collection("questions")
+      .find({ _id: { $in: worstQuestionIds.map((id) => new ObjectId(id)) } })
+      .toArray();
+    const questionById = new Map(questionDocs.map((q) => [String(q._id), q]));
+
+    const recurringMistakes = worstQuestionIds
+      .map((id) => {
+        const doc = questionById.get(id);
+        const tally = questionTally.get(id)!;
+        if (!doc) return null;
+        return {
+          questionNo: doc.questionNo as number,
+          subject: doc.subject as string,
+          body: doc.body as string,
+          correctOption: doc.correctOption as OptionKey,
+          solution: doc.solution as string,
+          wrongCount: tally.wrongCount,
+          totalSeen: tally.totalSeen,
+        };
+      })
+      .filter((q): q is NonNullable<typeof q> => q !== null);
+
+    return {
+      testName,
+      attempts: attempts.map((a) => ({
+        id: String(a._id),
+        attemptNumber: a.attemptNumber as number,
+        score: a.score as number,
+        totalMarks: a.totalMarks as number,
+        timeTakenMinutes: a.timeTakenMinutes as number,
+        submittedAt: a.submittedAt instanceof Date ? a.submittedAt.toISOString() : null,
+      })),
+      subjectAccuracy,
+      recurringMistakes,
+    };
+  });
 export const getLeaderboard = createServerFn({ method: "GET" })
   .validator((data: { token: string; testId: string }) => data)
   .handler(async ({ data }) => {

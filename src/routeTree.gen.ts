@@ -16,6 +16,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TestTestIdRouteImport } from './routes/test.$testId'
 import { Route as TestResultAttemptIdRouteImport } from './routes/test-result.$attemptId'
+import { Route as TestAnalysisTestIdRouteImport } from './routes/test-analysis.$testId'
 import { Route as MentorDashboardRouteImport } from './routes/mentor.dashboard'
 import { Route as AdminDashboardRouteImport } from './routes/admin.dashboard'
 import { Route as AdminAuthRouteImport } from './routes/admin.auth'
@@ -56,6 +57,11 @@ const TestResultAttemptIdRoute = TestResultAttemptIdRouteImport.update({
   path: '/test-result/$attemptId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TestAnalysisTestIdRoute = TestAnalysisTestIdRouteImport.update({
+  id: '/test-analysis/$testId',
+  path: '/test-analysis/$testId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MentorDashboardRoute = MentorDashboardRouteImport.update({
   id: '/mentor/dashboard',
   path: '/mentor/dashboard',
@@ -86,6 +92,7 @@ export interface FileRoutesByFullPath {
   '/admin/auth': typeof AdminAuthRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/mentor/dashboard': typeof MentorDashboardRoute
+  '/test-analysis/$testId': typeof TestAnalysisTestIdRoute
   '/test-result/$attemptId': typeof TestResultAttemptIdRoute
   '/test/$testId': typeof TestTestIdRoute
   '/course/$kind/$id': typeof CourseKindIdRoute
@@ -99,6 +106,7 @@ export interface FileRoutesByTo {
   '/admin/auth': typeof AdminAuthRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/mentor/dashboard': typeof MentorDashboardRoute
+  '/test-analysis/$testId': typeof TestAnalysisTestIdRoute
   '/test-result/$attemptId': typeof TestResultAttemptIdRoute
   '/test/$testId': typeof TestTestIdRoute
   '/course/$kind/$id': typeof CourseKindIdRoute
@@ -113,6 +121,7 @@ export interface FileRoutesById {
   '/admin/auth': typeof AdminAuthRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/mentor/dashboard': typeof MentorDashboardRoute
+  '/test-analysis/$testId': typeof TestAnalysisTestIdRoute
   '/test-result/$attemptId': typeof TestResultAttemptIdRoute
   '/test/$testId': typeof TestTestIdRoute
   '/course/$kind/$id': typeof CourseKindIdRoute
@@ -128,6 +137,7 @@ export interface FileRouteTypes {
     | '/admin/auth'
     | '/admin/dashboard'
     | '/mentor/dashboard'
+    | '/test-analysis/$testId'
     | '/test-result/$attemptId'
     | '/test/$testId'
     | '/course/$kind/$id'
@@ -141,6 +151,7 @@ export interface FileRouteTypes {
     | '/admin/auth'
     | '/admin/dashboard'
     | '/mentor/dashboard'
+    | '/test-analysis/$testId'
     | '/test-result/$attemptId'
     | '/test/$testId'
     | '/course/$kind/$id'
@@ -154,6 +165,7 @@ export interface FileRouteTypes {
     | '/admin/auth'
     | '/admin/dashboard'
     | '/mentor/dashboard'
+    | '/test-analysis/$testId'
     | '/test-result/$attemptId'
     | '/test/$testId'
     | '/course/$kind/$id'
@@ -168,6 +180,7 @@ export interface RootRouteChildren {
   AdminAuthRoute: typeof AdminAuthRoute
   AdminDashboardRoute: typeof AdminDashboardRoute
   MentorDashboardRoute: typeof MentorDashboardRoute
+  TestAnalysisTestIdRoute: typeof TestAnalysisTestIdRoute
   TestResultAttemptIdRoute: typeof TestResultAttemptIdRoute
   TestTestIdRoute: typeof TestTestIdRoute
   CourseKindIdRoute: typeof CourseKindIdRoute
@@ -224,6 +237,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TestResultAttemptIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/test-analysis/$testId': {
+      id: '/test-analysis/$testId'
+      path: '/test-analysis/$testId'
+      fullPath: '/test-analysis/$testId'
+      preLoaderRoute: typeof TestAnalysisTestIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/mentor/dashboard': {
       id: '/mentor/dashboard'
       path: '/mentor/dashboard'
@@ -264,6 +284,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminAuthRoute: AdminAuthRoute,
   AdminDashboardRoute: AdminDashboardRoute,
   MentorDashboardRoute: MentorDashboardRoute,
+  TestAnalysisTestIdRoute: TestAnalysisTestIdRoute,
   TestResultAttemptIdRoute: TestResultAttemptIdRoute,
   TestTestIdRoute: TestTestIdRoute,
   CourseKindIdRoute: CourseKindIdRoute,

@@ -41,7 +41,7 @@ export function CbtSimulator() {
         {/* Top header bar */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
           <div className="flex items-center gap-3">
-            <img src="https://yt3.googleusercontent.com/qdo1xrlhfa82iLMS4yqWLJtgFt4-jizxXkvR_6HuYzYIv65nN0zg3-J3YDEwRK405xh_ASSgtQ=s160-c-k-c0x00ffffff-no-rj" alt="Logo" className="h-8 w-auto" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display='none'}} />
+            <img src="https://i.postimg.cc/WztCwkGB/Edurack.jpg" alt="Logo" className="h-8 w-auto" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display='none'}} />
             <div className="text-sm font-semibold text-slate-800">NEET (UG) — Mock Test 07</div>
           </div>
           <div className="flex items-center gap-3 text-xs sm:text-sm">

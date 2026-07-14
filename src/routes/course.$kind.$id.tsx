@@ -15,6 +15,7 @@ import {
   X,
   Users2,
   BookOpen,
+  BarChart3,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { AppHeader } from "@/components/app-header";
@@ -28,6 +29,7 @@ import {
   submitSupportTicket,
 } from "@/server-functions/batch-hub";
 import { createRazorpayOrder, verifyRazorpayPayment } from "@/server-functions/payments";
+import { listMyAttemptsForTest } from "@/server-functions/test-results";
 
 // Razorpay's checkout.js attaches window.Razorpay — declared here since it's
 // loaded dynamically rather than imported as a module.
@@ -185,7 +187,7 @@ function CourseHubPage() {
         amount: order.amount,
         currency: order.currency,
         order_id: order.orderId,
-        name: "The Apron Boy",
+        name: "Edurack",
         description: order.itemTitle,
         prefill: { email: user.email ?? undefined },
         theme: { color: "#0284c7" },
@@ -284,7 +286,9 @@ function CourseHubPage() {
               itemId={id}
             />
           )}
-          {activeTab === "tests" && <TestsTab tests={tests} isPurchased={isPurchased} navigate={navigate} />}
+          {activeTab === "tests" && (
+            <TestsTab tests={tests} isPurchased={isPurchased} navigate={navigate} user={user} />
+          )}
           {activeTab === "assets" && (
             <AssetsTab bundle={bundle} isPurchased={isPurchased} onOpenPdf={setPdfModalUrl} />
           )}
@@ -557,11 +561,40 @@ function TestsTab({
   tests,
   isPurchased,
   navigate,
+  user,
 }: {
   tests: TestRow[] | null;
   isPurchased: boolean;
   navigate: ReturnType<typeof useNavigate>;
+  user: { getIdToken: () => Promise<string> };
 }) {
+  // Per-test attempt summary: undefined = still loading, [] = never attempted.
+  const [attemptsByTest, setAttemptsByTest] = useState<
+    Record<string, { count: number; bestScore: number; totalMarks: number } | undefined>
+  >({});
+
+  useEffect(() => {
+    if (!tests || tests.length === 0 || !isPurchased) return;
+    let cancelled = false;
+    (async () => {
+      const token = await user.getIdToken();
+      const entries = await Promise.all(
+        tests.map(async (t) => {
+          const { attempts } = await listMyAttemptsForTest({ data: { token, testId: t.id } });
+          if (attempts.length === 0) return [t.id, undefined] as const;
+          const best = attempts.reduce((max, a) => (a.score > max.score ? a : max), attempts[0]);
+          return [t.id, { count: attempts.length, bestScore: best.score, totalMarks: best.totalMarks }] as const;
+        }),
+      );
+      if (cancelled) return;
+      setAttemptsByTest(Object.fromEntries(entries));
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tests, isPurchased]);
+
   if (tests === null) {
     return (
       <div className="flex justify-center py-10">
@@ -582,6 +615,7 @@ function TestsTab({
         const end = new Date(t.liveEnd).getTime();
         const isLive = now >= start && now <= end;
         const isUpcoming = now < start;
+        const attempted = attemptsByTest[t.id];
 
         return (
           <LockGate key={t.id} locked={!isPurchased}>
@@ -591,7 +625,7 @@ function TestsTab({
                 <p className="text-xs text-foreground/50">
                   {t.totalQuestions} questions · {t.timeLimitMinutes} min
                 </p>
-                <p className="mt-1 text-xs font-semibold">
+                <p className="mt-1 flex items-center gap-2 text-xs font-semibold">
                   {isLive ? (
                     <span className="inline-flex items-center gap-1.5 text-[var(--coral-soft)]">
                       <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" /> LIVE
@@ -601,16 +635,41 @@ function TestsTab({
                   ) : (
                     <span className="text-foreground/50">Held on: {new Date(t.liveStart).toLocaleDateString()}</span>
                   )}
+                  {attempted && (
+                    <span className="rounded-full bg-[var(--mint-soft)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-foreground">
+                      Attempted {attempted.count}x · Best {attempted.bestScore}/{attempted.totalMarks}
+                    </span>
+                  )}
                 </p>
               </div>
-              <button
-                disabled={!isPurchased}
-                onClick={() => navigate({ to: "/test/$testId", params: { testId: t.id } })}
-                className="clay-btn flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold disabled:opacity-40"
-              >
-                <PlayCircle className="h-4 w-4" />
-                Start Test
-              </button>
+
+              {attempted ? (
+                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                  <button
+                    onClick={() => navigate({ to: "/test-analysis/$testId", params: { testId: t.id } })}
+                    className="clay-btn flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold"
+                  >
+                    <BarChart3 className="h-4 w-4" />
+                    View Analysis
+                  </button>
+                  <button
+                    disabled={!isPurchased}
+                    onClick={() => navigate({ to: "/test/$testId", params: { testId: t.id } })}
+                    className="text-[11px] font-semibold text-[var(--sky-deep)] hover:underline disabled:opacity-40"
+                  >
+                    Retake test
+                  </button>
+                </div>
+              ) : (
+                <button
+                  disabled={!isPurchased}
+                  onClick={() => navigate({ to: "/test/$testId", params: { testId: t.id } })}
+                  className="clay-btn flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold disabled:opacity-40"
+                >
+                  <PlayCircle className="h-4 w-4" />
+                  Start Test
+                </button>
+              )}
             </div>
           </LockGate>
         );

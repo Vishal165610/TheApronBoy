@@ -78,10 +78,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "The Apron Boy — NEET CBT Prep with a 1:1 NTA Replica Engine" },
+      { title: "Edurack — NEET CBT Prep with a 1:1 NTA Replica Engine" },
       { name: "description", content: "Practice NEET on an exact 1:1 replica of the NTA CBT test engine. Smart dashboards, dual mentor ecosystem, and deep analytics — built for droppers, 11th and 12th aspirants." },
-      { name: "author", content: "The Apron Boy" },
-      { property: "og:title", content: "The Apron Boy — NEET CBT Prep" },
+      { name: "author", content: "The Edurack Team" },
+      { property: "og:title", content: "Edurack — NEET CBT Prep" },
       { property: "og:description", content: "Practice NEET on an exact 1:1 replica of the NTA CBT test engine before exam day." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

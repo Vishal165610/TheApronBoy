@@ -9,7 +9,7 @@ import { mentorLogin } from "@/server-functions/mentor-auth";
 export const Route = createFileRoute("/admin/auth")({
   head: () => ({
     meta: [
-      { title: "Admin Access · The Apron Boy" },
+      { title: "Admin Access · Edurack" },
       { name: "robots", content: "noindex" },
     ],
   }),
@@ -62,7 +62,7 @@ function AdminAuthPage() {
             <ShieldCheck className="h-6 w-6 text-foreground/70" />
           </div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-foreground/60">
-            The Apron Boy — Admin Portal
+            Edurack — Admin Portal
           </p>
         </div>
 
