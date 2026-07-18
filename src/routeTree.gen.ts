@@ -9,22 +9,26 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as JoinMentorRouteImport } from './routes/join-mentor'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as ContactRouteImport } from './routes/contact'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TestTestIdRouteImport } from './routes/test.$testId'
 import { Route as TestResultAttemptIdRouteImport } from './routes/test-result.$attemptId'
 import { Route as TestAnalysisTestIdRouteImport } from './routes/test-analysis.$testId'
 import { Route as MentorDashboardRouteImport } from './routes/mentor.dashboard'
+import { Route as LegalTermsRouteImport } from './routes/legal/terms'
+import { Route as LegalRefundRouteImport } from './routes/legal/refund'
+import { Route as LegalPrivacyRouteImport } from './routes/legal/privacy'
 import { Route as AdminDashboardRouteImport } from './routes/admin.dashboard'
 import { Route as AdminAuthRouteImport } from './routes/admin.auth'
 import { Route as CourseKindIdRouteImport } from './routes/course.$kind.$id'
 
-const ProfileRoute = ProfileRouteImport.update({
-  id: '/profile',
-  path: '/profile',
+const JoinMentorRoute = JoinMentorRouteImport.update({
+  id: '/join-mentor',
+  path: '/join-mentor',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
@@ -35,6 +39,11 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ContactRoute = ContactRouteImport.update({
+  id: '/contact',
+  path: '/contact',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -67,6 +76,21 @@ const MentorDashboardRoute = MentorDashboardRouteImport.update({
   path: '/mentor/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LegalTermsRoute = LegalTermsRouteImport.update({
+  id: '/legal/terms',
+  path: '/legal/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalRefundRoute = LegalRefundRouteImport.update({
+  id: '/legal/refund',
+  path: '/legal/refund',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalPrivacyRoute = LegalPrivacyRouteImport.update({
+  id: '/legal/privacy',
+  path: '/legal/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminDashboardRoute = AdminDashboardRouteImport.update({
   id: '/admin/dashboard',
   path: '/admin/dashboard',
@@ -86,11 +110,15 @@ const CourseKindIdRoute = CourseKindIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRoute
   '/forgot-password': typeof ForgotPasswordRoute
-  '/profile': typeof ProfileRoute
+  '/join-mentor': typeof JoinMentorRoute
   '/admin/auth': typeof AdminAuthRoute
   '/admin/dashboard': typeof AdminDashboardRoute
+  '/legal/privacy': typeof LegalPrivacyRoute
+  '/legal/refund': typeof LegalRefundRoute
+  '/legal/terms': typeof LegalTermsRoute
   '/mentor/dashboard': typeof MentorDashboardRoute
   '/test-analysis/$testId': typeof TestAnalysisTestIdRoute
   '/test-result/$attemptId': typeof TestResultAttemptIdRoute
@@ -100,11 +128,15 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRoute
   '/forgot-password': typeof ForgotPasswordRoute
-  '/profile': typeof ProfileRoute
+  '/join-mentor': typeof JoinMentorRoute
   '/admin/auth': typeof AdminAuthRoute
   '/admin/dashboard': typeof AdminDashboardRoute
+  '/legal/privacy': typeof LegalPrivacyRoute
+  '/legal/refund': typeof LegalRefundRoute
+  '/legal/terms': typeof LegalTermsRoute
   '/mentor/dashboard': typeof MentorDashboardRoute
   '/test-analysis/$testId': typeof TestAnalysisTestIdRoute
   '/test-result/$attemptId': typeof TestResultAttemptIdRoute
@@ -115,11 +147,15 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRoute
   '/forgot-password': typeof ForgotPasswordRoute
-  '/profile': typeof ProfileRoute
+  '/join-mentor': typeof JoinMentorRoute
   '/admin/auth': typeof AdminAuthRoute
   '/admin/dashboard': typeof AdminDashboardRoute
+  '/legal/privacy': typeof LegalPrivacyRoute
+  '/legal/refund': typeof LegalRefundRoute
+  '/legal/terms': typeof LegalTermsRoute
   '/mentor/dashboard': typeof MentorDashboardRoute
   '/test-analysis/$testId': typeof TestAnalysisTestIdRoute
   '/test-result/$attemptId': typeof TestResultAttemptIdRoute
@@ -131,11 +167,15 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/contact'
     | '/dashboard'
     | '/forgot-password'
-    | '/profile'
+    | '/join-mentor'
     | '/admin/auth'
     | '/admin/dashboard'
+    | '/legal/privacy'
+    | '/legal/refund'
+    | '/legal/terms'
     | '/mentor/dashboard'
     | '/test-analysis/$testId'
     | '/test-result/$attemptId'
@@ -145,11 +185,15 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/contact'
     | '/dashboard'
     | '/forgot-password'
-    | '/profile'
+    | '/join-mentor'
     | '/admin/auth'
     | '/admin/dashboard'
+    | '/legal/privacy'
+    | '/legal/refund'
+    | '/legal/terms'
     | '/mentor/dashboard'
     | '/test-analysis/$testId'
     | '/test-result/$attemptId'
@@ -159,11 +203,15 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/auth'
+    | '/contact'
     | '/dashboard'
     | '/forgot-password'
-    | '/profile'
+    | '/join-mentor'
     | '/admin/auth'
     | '/admin/dashboard'
+    | '/legal/privacy'
+    | '/legal/refund'
+    | '/legal/terms'
     | '/mentor/dashboard'
     | '/test-analysis/$testId'
     | '/test-result/$attemptId'
@@ -174,11 +222,15 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRoute
+  ContactRoute: typeof ContactRoute
   DashboardRoute: typeof DashboardRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
-  ProfileRoute: typeof ProfileRoute
+  JoinMentorRoute: typeof JoinMentorRoute
   AdminAuthRoute: typeof AdminAuthRoute
   AdminDashboardRoute: typeof AdminDashboardRoute
+  LegalPrivacyRoute: typeof LegalPrivacyRoute
+  LegalRefundRoute: typeof LegalRefundRoute
+  LegalTermsRoute: typeof LegalTermsRoute
   MentorDashboardRoute: typeof MentorDashboardRoute
   TestAnalysisTestIdRoute: typeof TestAnalysisTestIdRoute
   TestResultAttemptIdRoute: typeof TestResultAttemptIdRoute
@@ -188,11 +240,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/profile': {
-      id: '/profile'
-      path: '/profile'
-      fullPath: '/profile'
-      preLoaderRoute: typeof ProfileRouteImport
+    '/join-mentor': {
+      id: '/join-mentor'
+      path: '/join-mentor'
+      fullPath: '/join-mentor'
+      preLoaderRoute: typeof JoinMentorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/forgot-password': {
@@ -207,6 +259,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/contact': {
+      id: '/contact'
+      path: '/contact'
+      fullPath: '/contact'
+      preLoaderRoute: typeof ContactRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -251,6 +310,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MentorDashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/legal/terms': {
+      id: '/legal/terms'
+      path: '/legal/terms'
+      fullPath: '/legal/terms'
+      preLoaderRoute: typeof LegalTermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal/refund': {
+      id: '/legal/refund'
+      path: '/legal/refund'
+      fullPath: '/legal/refund'
+      preLoaderRoute: typeof LegalRefundRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal/privacy': {
+      id: '/legal/privacy'
+      path: '/legal/privacy'
+      fullPath: '/legal/privacy'
+      preLoaderRoute: typeof LegalPrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/dashboard': {
       id: '/admin/dashboard'
       path: '/admin/dashboard'
@@ -278,11 +358,15 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
+  ContactRoute: ContactRoute,
   DashboardRoute: DashboardRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
-  ProfileRoute: ProfileRoute,
+  JoinMentorRoute: JoinMentorRoute,
   AdminAuthRoute: AdminAuthRoute,
   AdminDashboardRoute: AdminDashboardRoute,
+  LegalPrivacyRoute: LegalPrivacyRoute,
+  LegalRefundRoute: LegalRefundRoute,
+  LegalTermsRoute: LegalTermsRoute,
   MentorDashboardRoute: MentorDashboardRoute,
   TestAnalysisTestIdRoute: TestAnalysisTestIdRoute,
   TestResultAttemptIdRoute: TestResultAttemptIdRoute,

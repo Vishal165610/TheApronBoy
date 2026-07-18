@@ -9,6 +9,10 @@ import {
   LineChart,
   ArrowRight,
   Sparkles,
+  Play,
+  UserCheck,
+  Cpu,
+  TrendingUp,
 } from "lucide-react";
 import { CbtSimulator } from "@/components/landing/CbtSimulator";
 
@@ -16,11 +20,26 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-const navLinks = [
-  { label: "CBT Simulator", href: "#simulator" },
-  { label: "Features", href: "#features" },
-  { label: "AIIMS Mentors", href: "#features" },
-  { label: "Test Series", href: "#" },
+// Path to the platform's official logo asset. Update once the final
+// exported .png is dropped into /public/assets/branding.
+const LOGO_SRC = "/assets/branding/edurack-logo.png";
+
+// ---------------------------------------------
+// Navigation config
+// ---------------------------------------------
+// `anchor` items scroll within the landing page itself.
+// `route` items navigate to a distinct TanStack Router route.
+
+type NavLink =
+  | { label: string; type: "anchor"; href: string }
+  | { label: string; type: "route"; to: string };
+
+const navLinks: NavLink[] = [
+  { label: "CBT Simulator", type: "anchor", href: "#simulator" },
+  { label: "Mentors", type: "anchor", href: "#mentors" },
+  { label: "Features", type: "anchor", href: "#features" },
+  { label: "Join as Mentor", type: "anchor", href: "#marketplace" },
+  { label: "Contact", type: "route", to: "/contact" },
 ];
 
 function Index() {
@@ -30,10 +49,30 @@ function Index() {
       <main>
         <Hero />
         <SimulatorSection />
+        <MentorVideoShowcase />
         <FeaturesGrid />
+        <MarketplaceBanner />
       </main>
       <Footer />
     </div>
+  );
+}
+
+function NavItem({ link, onClick }: { link: NavLink; className?: string; onClick?: () => void }) {
+  const className = "rounded-full px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-white/60";
+
+  if (link.type === "route") {
+    return (
+      <Link to={link.to} onClick={onClick} className={className}>
+        {link.label}
+      </Link>
+    );
+  }
+
+  return (
+    <a href={link.href} onClick={onClick} className={className}>
+      {link.label}
+    </a>
   );
 }
 
@@ -42,24 +81,22 @@ function Header() {
   return (
     <header className="sticky top-0 z-50 px-3 pt-3 sm:px-6 sm:pt-5">
       <div className="clay-sm mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-        <a href="#" className="flex items-center gap-2 min-w-0">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-600 to-teal-500 text-white font-bold font-display text-lg shadow-sm">
-            E
-          </span>
+        <Link to="/" className="flex min-w-0 items-center gap-2.5">
+          <img
+            src={LOGO_SRC}
+            alt="EDURACK"
+            className="h-9 w-auto shrink-0"
+            width={36}
+            height={36}
+          />
           <span className="truncate font-display text-lg font-bold tracking-tight sm:text-xl">
             EDURACK
           </span>
-        </a>
+        </Link>
 
         <nav className="hidden items-center gap-1 md:flex">
           {navLinks.map((l) => (
-            <a
-              key={l.label}
-              href={l.href}
-              className="rounded-full px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-white/60"
-            >
-              {l.label}
-            </a>
+            <NavItem key={l.label} link={l} />
           ))}
         </nav>
 
@@ -81,14 +118,11 @@ function Header() {
         <div className="clay-sm mx-auto mt-2 max-w-7xl p-4 md:hidden">
           <nav className="flex flex-col gap-1">
             {navLinks.map((l) => (
-              <a
+              <NavItem
                 key={l.label}
-                href={l.href}
+                link={l}
                 onClick={() => setOpen(false)}
-                className="rounded-xl px-4 py-3 text-sm font-medium text-slate-700 hover:bg-white/70"
-              >
-                {l.label}
-              </a>
+              />
             ))}
             <div className="mt-2 grid grid-cols-2 gap-2">
               <Link to="/auth" onClick={() => setOpen(false)} className="clay-btn-ghost px-4 py-2.5 text-center text-sm font-semibold">Login</Link>
@@ -121,10 +155,10 @@ function Hero() {
         <p className="fluid-body mx-auto mt-6 max-w-2xl text-slate-600">
           Don't let the sudden shift to digital layout break your focus. EDURACK provides a 
           <b className="text-slate-800"> 1:1 pixel-exact NTA replica</b> test simulator paired with elite 
-          mentorship from top AIIMS rankers.
+          mentorship spaces created directly by top AIIMS rankers.
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <Link to="/auth" className="clay-btn group inline-flex items-center gap-2 px-7 py-4 text-base font-bold sm:text-lg">
+          <Link to="/simulator/live" className="clay-btn group inline-flex items-center gap-2 px-7 py-4 text-base font-bold sm:text-lg">
             Start Free CBT Mock Test
             <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
           </Link>
@@ -136,7 +170,7 @@ function Hero() {
         <div className="mt-10 grid grid-cols-3 gap-3 sm:mx-auto sm:max-w-xl">
           {[
             { k: "1:1", v: "CBT Interface" },
-            { k: "100%", v: "AIIMS Mentors" },
+            { k: "Open", v: "Mentor Market" },
             { k: "2027", v: "Format Ready" },
           ].map((s) => (
             <div key={s.k} className="clay-sm px-3 py-4">
@@ -172,6 +206,63 @@ function SimulatorSection() {
   );
 }
 
+function MentorVideoShowcase() {
+  // Replace placeholders with video player configurations or embed links as needed
+  const sampleVideos = [
+    { name: "Rahul Jha", rank: "AIR 14 · AIIMS Delhi", topic: "CBT Strategy" },
+    { name: "Sneha Reddy", rank: "AIR 35 · AIIMS Rishikesh", topic: "Physics Screen Stamina" },
+    { name: "Aman Verma", rank: "AIR 89 · AIIMS Bhopal", topic: "Organic Chemistry Hack" },
+  ];
+
+  return (
+    <section id="mentors" className="px-4 py-16 sm:px-6 lg:py-24 bg-slate-50/50">
+      <div className="mx-auto max-w-6xl">
+        <div className="text-center max-w-3xl mx-auto">
+          <div className="clay-chip inline-flex px-4 py-1.5 text-xs font-semibold text-orange-700">
+            LEARN FROM THE BEST
+          </div>
+          <h2 className="fluid-h2 mt-4 font-display font-extrabold text-slate-900">
+            Direct Guidance From Top AIIMS Rankers
+          </h2>
+          <p className="fluid-body mt-3 text-slate-600">
+            Hear straight from the mentors who successfully navigated the competitive pressure. Watch their high-yield preparation tips below.
+          </p>
+        </div>
+
+        <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {sampleVideos.map((v, i) => (
+            <div key={i} className="clay overflow-hidden p-4 flex flex-col justify-between">
+              {/* Video container container wrapper */}
+              <div className="relative aspect-video w-full rounded-2xl bg-slate-900 grid place-items-center group cursor-pointer shadow-inner">
+                <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent z-10" />
+                <button 
+                  className="z-20 h-14 w-14 rounded-full bg-white/90 dynamic-blur grid place-items-center shadow-md transition-transform group-hover:scale-110"
+                  aria-label={`Play strategy video by ${v.name}`}
+                >
+                  <Play className="h-6 w-6 text-sky-600 fill-sky-600 ml-0.5" />
+                </button>
+                <span className="absolute bottom-3 left-4 z-20 text-xs font-bold text-white tracking-wide uppercase bg-black/30 backdrop-blur-sm px-2.5 py-1 rounded-md">
+                  {v.topic}
+                </span>
+              </div>
+              
+              <div className="mt-4 flex items-center justify-between">
+                <div>
+                  <h3 className="font-display font-bold text-slate-900">{v.name}</h3>
+                  <p className="text-xs font-medium text-slate-500">{v.rank}</p>
+                </div>
+                <Link to="/auth" className="clay-btn-ghost px-4 py-2 text-xs font-bold">
+                  View Space
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 const features = [
   {
     icon: MonitorPlay,
@@ -189,8 +280,8 @@ const features = [
   },
   {
     icon: CalendarCheck,
-    title: "Elite AIIMS Mentorship",
-    desc: "Direct 50-50 revenue split model brings you raw strategies from students who actually conquered the paper.",
+    title: "Direct Mentor Marketplace",
+    desc: "Browse premium batches listed directly by top-tier creators at their own customized rates.",
     color: "text-orange-600",
     bg: "bg-orange-100",
   },
@@ -235,7 +326,7 @@ function FeaturesGrid() {
             </h3>
             <p className="mt-2 text-slate-600">Get ahead of the curve before the official 2027 transition hits.</p>
           </div>
-          <Link to="/auth" className="clay-btn inline-flex items-center gap-2 px-7 py-4 text-base font-bold justify-self-start md:justify-self-end">
+          <Link to="/simulator/live" className="clay-btn inline-flex items-center gap-2 px-7 py-4 text-base font-bold justify-self-start md:justify-self-end">
             Try Free Mock Test <ArrowRight className="h-5 w-5" />
           </Link>
         </div>
@@ -244,23 +335,97 @@ function FeaturesGrid() {
   );
 }
 
+function MarketplaceBanner() {
+  return (
+    <section id="marketplace" className="px-4 pb-20 sm:px-6 lg:pb-28">
+      <div className="mx-auto max-w-6xl clay bg-gradient-to-br from-slate-900 to-slate-800 text-white p-8 md:p-14 rounded-3xl relative overflow-hidden">
+        <div className="absolute -right-16 -bottom-16 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -left-16 -top-16 w-64 h-64 bg-sky-500/10 rounded-full blur-3xl pointer-events-none" />
+        
+        <div className="relative z-15 max-w-3xl">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-sm text-xs font-semibold tracking-wide text-teal-300">
+            <UserCheck className="h-3.5 w-3.5" />
+            Are you an AIIMS Student or Med-Creator?
+          </div>
+          <h2 className="text-3xl font-display font-extrabold tracking-tight mt-4 sm:text-4xl text-white">
+            Monetize your expertise. Run your own mentorship store on EDURACK.
+          </h2>
+          <p className="mt-4 text-base text-slate-300 leading-relaxed">
+            Stop dealing with unorganized tracking spreadsheets, structural setup barriers, or manual group entry confirmations. Set your fixed price tiers, deliver premium guidance schedules, and let our automated payment configuration process your withdrawals seamlessly.
+          </p>
+          
+          <div className="mt-8 flex flex-wrap items-center gap-4">
+            <Link to="/join-mentor" className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-br from-sky-500 to-teal-400 text-slate-950 text-sm font-bold shadow-md hover:opacity-95 transition">
+              Create Mentor Space <Cpu className="h-4 w-4" />
+            </Link>
+            <a href="https://linkedin.com" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-white/5 border border-white/10 text-sm font-semibold hover:bg-white/10 transition">
+              Follow Corporate Updates <TrendingUp className="h-4 w-4" />
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------
+// Footer
+// ---------------------------------------------
+
+type FooterLink =
+  | { label: string; type: "route"; to: string }
+  | { label: string; type: "external"; href: string };
+
+const footerColumns: { title: string; links: FooterLink[] }[] = [
+  {
+    title: "Product",
+    links: [
+      { label: "CBT Simulator", type: "route", to: "/simulator/live" },
+      { label: "Syllabus Trackers", type: "route", to: "/dashboard" },
+      { label: "Analytics", type: "route", to: "/dashboard" },
+      { label: "Mentors", type: "route", to: "/join-mentor" },
+    ],
+  },
+  {
+    title: "Aspirants",
+    links: [
+      { label: "NEET Hub", type: "route", to: "/" },
+      { label: "Free Papers", type: "route", to: "/simulator/live" },
+      { label: "Contact Us", type: "route", to: "/contact" },
+    ],
+  },
+  {
+    title: "Legal",
+    links: [
+      { label: "Terms", type: "route", to: "/legal/terms" },
+      { label: "Privacy", type: "route", to: "/legal/privacy" },
+      { label: "Refund", type: "route", to: "/legal/refund" },
+      { label: "Contact", type: "route", to: "/contact" },
+    ],
+  },
+];
+
 function Footer() {
   return (
     <footer className="px-4 pb-8 pt-10 sm:px-6">
       <div className="clay-sm mx-auto max-w-7xl px-6 py-8">
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-4">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-sky-600 to-teal-500 text-white font-bold font-display text-xs">
-                E
-              </span>
+            <Link to="/" className="flex items-center gap-2">
+              <img
+                src={LOGO_SRC}
+                alt="EDURACK"
+                className="h-7 w-auto shrink-0"
+                width={28}
+                height={28}
+              />
               <span className="font-display text-lg font-bold">EDURACK</span>
-            </div>
+            </Link>
             <p className="mt-3 text-sm text-slate-600">The next-gen CBT testing and mentorship platform.</p>
           </div>
-          <FooterCol title="Product" items={["CBT Simulator", "Syllabus Trackers", "Analytics", "Mentors"]} />
-          <FooterCol title="Aspirants" items={["NEET Hub", "JEE Hub (Coming Soon)", "Free Papers", "Success Stories"]} />
-          <FooterCol title="Legal" items={["Terms", "Privacy", "Refund", "Contact"]} />
+          {footerColumns.map((col) => (
+            <FooterCol key={col.title} title={col.title} links={col.links} />
+          ))}
         </div>
         <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/70 pt-5 text-xs text-slate-500">
           <span>© {new Date().getFullYear()} EDURACK. All rights reserved.</span>
@@ -271,14 +436,18 @@ function Footer() {
   );
 }
 
-function FooterCol({ title, items }: { title: string; items: string[] }) {
+function FooterCol({ title, links }: { title: string; links: FooterLink[] }) {
   return (
     <div>
       <div className="font-display text-sm font-bold text-slate-900">{title}</div>
       <ul className="mt-3 space-y-2 text-sm text-slate-600">
-        {items.map((i) => (
-          <li key={i}>
-            <a href="#" className="hover:text-slate-900">{i}</a>
+        {links.map((l) => (
+          <li key={l.label}>
+            {l.type === "route" ? (
+              <Link to={l.to} className="hover:text-slate-900">{l.label}</Link>
+            ) : (
+              <a href={l.href} target="_blank" rel="noreferrer" className="hover:text-slate-900">{l.label}</a>
+            )}
           </li>
         ))}
       </ul>
