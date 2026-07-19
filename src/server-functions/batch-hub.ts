@@ -192,3 +192,97 @@ export const submitSupportTicket = createServerFn({ method: "POST" })
     });
     return { ok: true };
   });
+
+  // ─── Student-facing: Extended mentor profile for mentorship batches ────────
+// Extends what getPublicMentorshipDetail already returns (name +
+// profilePictureUrl) with the full public-facing profile a student should
+// see: bio, year of study, intro video, and the locked verification fields
+// (rank/college/course) — read-only here exactly as they are in the mentor
+// portal, since students should see the same verified credentials a mentor
+// cannot self-edit.
+export const getPublicMentorProfile = createServerFn({ method: "GET" })
+  .validator((data: { token: string; mentorId: string }) => data)
+  .handler(async ({ data }) => {
+    await requireSignedIn(data.token);
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+    const m = await db.collection("mentors").findOne({ _id: new ObjectId(data.mentorId) });
+    if (!m) return { mentor: null };
+
+    return {
+      mentor: {
+        id: String(m._id),
+        name: m.name as string,
+        profilePictureUrl: (m.profilePictureUrl as string | null) ?? null,
+        aboutText: (m.aboutText as string) ?? "",
+        yearOfStudy: (m.yearOfStudy as string) ?? "",
+        introVideoUrl: (m.introVideoUrl as string | null) ?? null,
+        aiimsIitRank: (m.aiimsIitRank as string) ?? "",
+        enrolledCollege: (m.enrolledCollege as string) ?? "",
+        pursuedCourse: (m.pursuedCourse as string) ?? "",
+      },
+    };
+  });
+
+// ─── Student-facing: Live sessions for a mentorship batch ──────────────────
+// Mirrors listMentorshipSessions in mentor-portal.ts, but scoped for a
+// student rather than the mentor: BatchMeet and AsyncLecture sessions are
+// visible to every student in the batch, while OneOnOne sessions are only
+// visible if this specific student is the one booked into them — a student
+// should never see another student's 1:1 slot.
+export const listMentorshipSessionsForStudent = createServerFn({ method: "GET" })
+  .validator((data: { token: string; batchId: string }) => data)
+  .handler(async ({ data }) => {
+    const decoded = await requireSignedIn(data.token);
+    const db = await getDb();
+
+    const rows = await db
+      .collection("mentorshipSessions")
+      .find({
+        batchId: data.batchId,
+        $or: [{ track: { $ne: "OneOnOne" } }, { track: "OneOnOne", studentUid: decoded.uid }],
+      })
+      .sort({ scheduledAt: 1 })
+      .toArray();
+
+    return {
+      sessions: rows.map((r) => ({
+        id: String(r._id),
+        track: r.track as "OneOnOne" | "BatchMeet" | "AsyncLecture",
+        meetingLink: (r.meetingLink as string | null) ?? null,
+        lectureUrl: (r.lectureUrl as string | null) ?? null,
+        lectureTitle: (r.lectureTitle as string | null) ?? null,
+        durationMinutes: (r.durationMinutes as number | null) ?? null,
+        scheduledAt: r.scheduledAt as string,
+        status: r.status as "scheduled" | "completed" | "cancelled",
+      })),
+    };
+  });
+
+// ─── Student-facing: Mentorship batch announcements ─────────────────────────
+// The mentorship-side equivalent of listPublicBundleAnnouncements. Reads
+// from mentorshipBatchAnnouncements (written by postMentorAnnouncement in
+// mentor-portal.ts) rather than bundleAnnouncements — these are two
+// separate collections because mentorship announcements carry a title and
+// email-trigger metadata that bundle announcements don't.
+export const listPublicMentorshipAnnouncements = createServerFn({ method: "GET" })
+  .validator((data: { token: string; batchId: string }) => data)
+  .handler(async ({ data }) => {
+    await requireSignedIn(data.token);
+    const db = await getDb();
+    const rows = await db
+      .collection("mentorshipBatchAnnouncements")
+      .find({ batchId: data.batchId })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    return {
+      announcements: rows.map((r) => ({
+        id: String(r._id),
+        title: (r.title as string | null) ?? null,
+        message: (r.message as string | null) ?? null,
+        thumbnailUrl: null as string | null, // mentor announcements carry no thumbnail field
+        createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : null,
+      })),
+    };
+  });

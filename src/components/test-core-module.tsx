@@ -1,9 +1,40 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Loader2, ClipboardList, Pencil, AlertCircle, CheckCircle2 } from "lucide-react";
-import type { TestSeriesBundle, TestCore, SubjectWeightage } from "@/lib/admin-types";
-import { listBundles, createTestCore, listTestCoresForBundle, updateTestCore } from "@/server-functions/admin";
+import { useEffect, useState, type FormEvent } from "react";
+import {
+  Loader2,
+  ClipboardList,
+  Plus,
+  X,
+  Tag,
+  Scale,
+  CalendarRange,
+  FileText,
+  Pencil,
+} from "lucide-react";
+import {
+  listBundles,
+  createTestCore,
+  listTestCoresForBundle,
+  updateTestCore,
+} from "@/server-functions/admin";
 
 type AdminUser = { getIdToken: () => Promise<string> };
+
+type BundleOption = { id: string; title: string };
+
+type SubjectWeightageRow = { subject: string; questionCount: number };
+
+type TestCoreRow = {
+  id: string;
+  bundleId: string;
+  name: string;
+  totalQuestions: number;
+  subjects: string[];
+  weightage: SubjectWeightageRow[];
+  liveStart: string;
+  liveEnd: string;
+  instructions: string;
+  createdAt: string | null;
+};
 
 function ModuleHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
@@ -28,66 +59,134 @@ function ClayField({ label, children }: { label: string; children: React.ReactNo
 const inputClass =
   "clay-inset w-full rounded-2xl px-4 py-2.5 text-sm text-foreground placeholder:text-foreground/40 focus:outline-none";
 
-function parseSubjects(raw: string): string[] {
-  return Array.from(
-    new Set(
-      raw
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
-    ),
-  );
+const textareaClass =
+  "clay-inset w-full resize-none rounded-2xl px-4 py-3 text-sm text-foreground placeholder:text-foreground/40 focus:outline-none";
+
+// Parses a comma-separated subject tag string into a clean array, e.g.
+// "Physics, Chemistry,  Biology" -> ["Physics", "Chemistry", "Biology"].
+// Deduplicates and drops empties so a trailing comma or double-space never
+// produces a phantom subject.
+function parseSubjectTags(raw: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of raw.split(",")) {
+    const cleaned = part.trim();
+    if (cleaned && !seen.has(cleaned)) {
+      seen.add(cleaned);
+      out.push(cleaned);
+    }
+  }
+  return out;
 }
 
 export function TestCoreModule({ adminUser }: { adminUser: AdminUser }) {
-  const [bundles, setBundles] = useState<TestSeriesBundle[] | null>(null);
+  const [bundles, setBundles] = useState<BundleOption[] | null>(null);
   const [bundleId, setBundleId] = useState("");
-  const [tests, setTests] = useState<TestCore[] | null>(null);
-
-  const [name, setName] = useState("");
-  const [totalQuestions, setTotalQuestions] = useState("");
-  const [subjectsRaw, setSubjectsRaw] = useState("");
-  const [weightage, setWeightage] = useState<Record<string, string>>({});
-  const [liveStart, setLiveStart] = useState("");
-  const [liveEnd, setLiveEnd] = useState("");
-  const [instructions, setInstructions] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState<Partial<TestCore>>({});
-  const [savingEdit, setSavingEdit] = useState(false);
-
-  const subjects = useMemo(() => parseSubjects(subjectsRaw), [subjectsRaw]);
-  const total = Number(totalQuestions) || 0;
-  const assignedSum = subjects.reduce((sum, s) => sum + (Number(weightage[s]) || 0), 0);
-  const weightageBalanced = subjects.length > 0 && total > 0 && assignedSum === total;
+  const [tests, setTests] = useState<TestCoreRow[] | null>(null);
 
   useEffect(() => {
     (async () => {
       const token = await adminUser.getIdToken();
       const { bundles: rows } = await listBundles({ data: { token } });
-      setBundles(rows as TestSeriesBundle[]);
-      if (rows.length > 0) setBundleId(rows[0].id);
+      setBundles(rows.map((b) => ({ id: b.id, title: b.title })));
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminUser]);
 
-  async function refreshTests(id: string) {
-    if (!id) return setTests([]);
+  async function refreshTests() {
+    if (!bundleId) {
+      setTests(null);
+      return;
+    }
     const token = await adminUser.getIdToken();
-    const { testCores } = await listTestCoresForBundle({ data: { token, bundleId: id } });
-    setTests(testCores as TestCore[]);
+    const { testCores } = await listTestCoresForBundle({ data: { token, bundleId } });
+    setTests(testCores as TestCoreRow[]);
   }
 
   useEffect(() => {
-    if (bundleId) refreshTests(bundleId);
+    refreshTests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bundleId]);
 
-  function updateWeightage(subject: string, value: string) {
-    setWeightage((w) => ({ ...w, [subject]: value }));
+  return (
+    <div>
+      <ModuleHeader
+        title="Test Core Manager"
+        subtitle="Map individual mock tests inside a bundle — subjects, weightage, live windows, and instructions."
+      />
+
+      <div className="clay mb-6 p-5 sm:p-6">
+        <ClayField label="Parent bundle">
+          <select
+            value={bundleId}
+            onChange={(e) => setBundleId(e.target.value)}
+            className={inputClass + " appearance-none"}
+          >
+            <option value="">{bundles === null ? "Loading…" : "Select a bundle to begin"}</option>
+            {(bundles ?? []).map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.title}
+              </option>
+            ))}
+          </select>
+        </ClayField>
+      </div>
+
+      {bundleId && (
+        <>
+          <TestCoreCreationForm bundleId={bundleId} adminUser={adminUser} onCreated={refreshTests} />
+          <TestCoreList tests={tests} adminUser={adminUser} onSaved={refreshTests} />
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Creation form ───────────────────────────────────────────────────────────
+function TestCoreCreationForm({
+  bundleId,
+  adminUser,
+  onCreated,
+}: {
+  bundleId: string;
+  adminUser: AdminUser;
+  onCreated: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [totalQuestions, setTotalQuestions] = useState("");
+  const [subjectTagsRaw, setSubjectTagsRaw] = useState("");
+  const [weightage, setWeightage] = useState<SubjectWeightageRow[]>([{ subject: "", questionCount: 0 }]);
+  const [liveStart, setLiveStart] = useState("");
+  const [liveEnd, setLiveEnd] = useState("");
+  const [instructions, setInstructions] = useState("");
+
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  const parsedSubjects = parseSubjectTags(subjectTagsRaw);
+  const weightageSum = weightage.reduce((sum, w) => sum + (Number(w.questionCount) || 0), 0);
+
+  function updateWeightageRow(i: number, patch: Partial<SubjectWeightageRow>) {
+    const next = [...weightage];
+    next[i] = { ...next[i], ...patch };
+    setWeightage(next);
+  }
+  function addWeightageRow() {
+    setWeightage([...weightage, { subject: "", questionCount: 0 }]);
+  }
+  function removeWeightageRow(i: number) {
+    setWeightage(weightage.filter((_, idx) => idx !== i));
+  }
+
+  function resetForm() {
+    setName("");
+    setTotalQuestions("");
+    setSubjectTagsRaw("");
+    setWeightage([{ subject: "", questionCount: 0 }]);
+    setLiveStart("");
+    setLiveEnd("");
+    setInstructions("");
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -95,25 +194,26 @@ export function TestCoreModule({ adminUser }: { adminUser: AdminUser }) {
     setError(null);
     setSuccess(false);
 
-    if (!bundleId) return setError("Select a bundle first.");
     if (!name.trim()) return setError("Enter a test name.");
+    const total = Number(totalQuestions);
     if (!total || total <= 0) return setError("Enter a valid total question count.");
-    if (subjects.length === 0) return setError("Enter at least one subject.");
-    if (!weightageBalanced) {
-      return setError(
-        `Subject weightage must add up to exactly ${total} (currently ${assignedSum}).`,
-      );
+    if (parsedSubjects.length === 0) return setError("Add at least one subject tag.");
+
+    const cleanWeightage = weightage
+      .map((w) => ({ subject: w.subject.trim(), questionCount: Number(w.questionCount) || 0 }))
+      .filter((w) => w.subject && w.questionCount > 0);
+    if (cleanWeightage.length === 0) return setError("Add at least one subject weightage row.");
+    if (weightageSum !== total) {
+      return setError(`Weightage totals ${weightageSum}, but Total Questions is set to ${total}. They must match.`);
     }
-    if (!liveStart || !liveEnd) return setError("Set the live testing window.");
+
+    if (!liveStart || !liveEnd) return setError("Set both the live start and end window.");
     if (new Date(liveEnd) <= new Date(liveStart)) return setError("Live end must be after live start.");
+    if (!instructions.trim()) return setError("Add instructions for students taking this test.");
 
     setSaving(true);
     try {
       const token = await adminUser.getIdToken();
-      const weightageList: SubjectWeightage[] = subjects.map((s) => ({
-        subject: s,
-        questionCount: Number(weightage[s]) || 0,
-      }));
       await createTestCore({
         data: {
           token,
@@ -121,83 +221,34 @@ export function TestCoreModule({ adminUser }: { adminUser: AdminUser }) {
             bundleId,
             name: name.trim(),
             totalQuestions: total,
-            subjects,
-            weightage: weightageList,
+            subjects: parsedSubjects,
+            weightage: cleanWeightage,
             liveStart,
             liveEnd,
-            instructions,
+            instructions: instructions.trim(),
           },
         },
       });
       setSuccess(true);
-      setName("");
-      setTotalQuestions("");
-      setSubjectsRaw("");
-      setWeightage({});
-      setLiveStart("");
-      setLiveEnd("");
-      setInstructions("");
-      await refreshTests(bundleId);
-    } catch {
-      setError("Could not save the test. Try again.");
+      resetForm();
+      onCreated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create this test. Try again.");
     } finally {
       setSaving(false);
     }
   }
 
-  function startEdit(t: TestCore) {
-    setEditingId(t.id);
-    setEditDraft({
-      name: t.name,
-      totalQuestions: t.totalQuestions,
-      liveStart: t.liveStart,
-      liveEnd: t.liveEnd,
-      instructions: t.instructions,
-    });
-  }
-
-  async function saveEdit(id: string) {
-    setSavingEdit(true);
-    try {
-      const token = await adminUser.getIdToken();
-      await updateTestCore({ data: { token, id, testCore: editDraft } });
-      setEditingId(null);
-      await refreshTests(bundleId);
-    } finally {
-      setSavingEdit(false);
-    }
-  }
-
   return (
-    <div>
-      <ModuleHeader
-        title="Test Core Configurator"
-        subtitle="Append a test to a bundle with subject weightage and a live testing window."
-      />
-
-      <div className="clay mb-6 p-5 sm:p-6">
-        <ClayField label="Bundle">
-          <select
-            value={bundleId}
-            onChange={(e) => setBundleId(e.target.value)}
-            className={inputClass + " appearance-none"}
-          >
-            {bundles === null ? (
-              <option>Loading…</option>
-            ) : bundles.length === 0 ? (
-              <option>No bundles yet — create one first</option>
-            ) : (
-              bundles.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.title}
-                </option>
-              ))
-            )}
-          </select>
-        </ClayField>
+    <div className="clay mb-6 p-5 sm:p-6">
+      <div className="mb-4 flex items-center gap-2">
+        <ClipboardList className="h-4 w-4 text-foreground/60" />
+        <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-foreground/60">
+          Append a test to this bundle
+        </h2>
       </div>
 
-      <form onSubmit={handleSubmit} className="clay mb-6 space-y-5 p-5 sm:p-6">
+      <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <ClayField label="Test name">
             <input
@@ -218,80 +269,115 @@ export function TestCoreModule({ adminUser }: { adminUser: AdminUser }) {
           </ClayField>
         </div>
 
-        <ClayField label="Subjects (comma separated)">
-          <input
-            value={subjectsRaw}
-            onChange={(e) => setSubjectsRaw(e.target.value)}
-            placeholder="Physics, Chemistry, Biology"
-            className={inputClass}
-          />
-        </ClayField>
-
-        {subjects.length > 0 && (
-          <div className="clay-inset rounded-2xl p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-foreground/60">
-                Subject weightage
-              </p>
-              <span
-                className={`inline-flex items-center gap-1 text-xs font-semibold ${
-                  weightageBalanced ? "text-[var(--sky-deep)]" : "text-foreground/50"
-                }`}
-              >
-                {weightageBalanced ? (
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                ) : (
-                  <AlertCircle className="h-3.5 w-3.5" />
-                )}
-                {assignedSum} / {total || "?"}
-              </span>
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              {subjects.map((s) => (
-                <ClayField key={s} label={s}>
-                  <input
-                    value={weightage[s] ?? ""}
-                    onChange={(e) => updateWeightage(s, e.target.value)}
-                    inputMode="numeric"
-                    placeholder="0"
-                    className={inputClass}
-                  />
-                </ClayField>
+        <ClayField label="Subject tags (comma-separated)">
+          <div className="relative">
+            <Tag className="pointer-events-none absolute left-4 top-3.5 h-3.5 w-3.5 text-foreground/30" />
+            <input
+              value={subjectTagsRaw}
+              onChange={(e) => setSubjectTagsRaw(e.target.value)}
+              placeholder="Physics, Chemistry, Biology"
+              className={inputClass + " pl-10"}
+            />
+          </div>
+          {parsedSubjects.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {parsedSubjects.map((s) => (
+                <span
+                  key={s}
+                  className="clay-chip px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-foreground/70"
+                >
+                  {s}
+                </span>
               ))}
             </div>
-          </div>
-        )}
+          )}
+        </ClayField>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <ClayField label="Live start">
-            <input
-              type="datetime-local"
-              value={liveStart}
-              onChange={(e) => setLiveStart(e.target.value)}
-              className={inputClass}
-            />
-          </ClayField>
-          <ClayField label="Live end">
+        <div>
+          <span className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-foreground/50">
+            <Scale className="h-3.5 w-3.5" />
+            Subject weightage thresholds
+          </span>
+          <div className="space-y-2">
+            {weightage.map((w, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input
+                  value={w.subject}
+                  onChange={(e) => updateWeightageRow(i, { subject: e.target.value })}
+                  placeholder="Subject (e.g. Physics)"
+                  className={inputClass + " flex-1"}
+                  list="test-core-subject-suggestions"
+                />
+                <input
+                  value={w.questionCount || ""}
+                  onChange={(e) => updateWeightageRow(i, { questionCount: Number(e.target.value) || 0 })}
+                  inputMode="numeric"
+                  placeholder="Qs"
+                  className={inputClass + " w-24"}
+                />
+                {weightage.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeWeightageRow(i)}
+                    className="text-foreground/40 hover:text-foreground/70"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            ))}
+            <datalist id="test-core-subject-suggestions">
+              {parsedSubjects.map((s) => (
+                <option key={s} value={s} />
+              ))}
+            </datalist>
+            <button
+              type="button"
+              onClick={addWeightageRow}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--sky-deep)] hover:underline"
+            >
+              <Plus className="h-3.5 w-3.5" /> Add subject row
+            </button>
+          </div>
+          <p
+            className={`mt-2 text-xs font-medium ${
+              totalQuestions && weightageSum !== Number(totalQuestions)
+                ? "text-[var(--destructive)]"
+                : "text-foreground/40"
+            }`}
+          >
+            Weightage total: {weightageSum}
+            {totalQuestions ? ` / ${totalQuestions} required` : ""}
+          </p>
+        </div>
+
+        <ClayField label="Live window">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="relative">
+              <CalendarRange className="pointer-events-none absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-foreground/30" />
+              <input
+                type="datetime-local"
+                value={liveStart}
+                onChange={(e) => setLiveStart(e.target.value)}
+                className={inputClass + " pl-10"}
+              />
+            </div>
             <input
               type="datetime-local"
               value={liveEnd}
               onChange={(e) => setLiveEnd(e.target.value)}
               className={inputClass}
             />
-          </ClayField>
-        </div>
-        <p className="text-xs text-foreground/40">
-          Between these times the test shows a LIVE badge on the student side. After the window
-          closes, it automatically becomes a regular practice module.
-        </p>
+          </div>
+        </ClayField>
 
-        <ClayField label="Test instructions">
+        <ClayField label="Instructions for students">
           <textarea
             value={instructions}
             onChange={(e) => setInstructions(e.target.value)}
             rows={4}
-            placeholder="General instructions shown to students before they start…"
-            className={inputClass}
+            placeholder="e.g. Negative marking applies. Calculator not allowed. Duration: 3 hours…"
+            className={textareaClass}
           />
         </ClayField>
 
@@ -302,103 +388,151 @@ export function TestCoreModule({ adminUser }: { adminUser: AdminUser }) {
         )}
         {success && (
           <p className="rounded-2xl bg-[var(--mint-soft)]/60 px-4 py-2 text-xs font-medium text-foreground">
-            Test added to bundle.
+            Test appended to bundle.
           </p>
         )}
 
         <button
           type="submit"
-          disabled={saving || !bundleId}
+          disabled={saving}
           className="clay-btn flex items-center justify-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold disabled:opacity-70"
         >
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add test to bundle"}
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Append test to bundle"}
         </button>
       </form>
+    </div>
+  );
+}
 
-      <div className="clay p-5 sm:p-6">
-        <div className="mb-4 flex items-center gap-2">
-          <ClipboardList className="h-4 w-4 text-foreground/60" />
-          <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-foreground/60">
-            Tests in this bundle
-          </h2>
+// ─── List of tests already in this bundle ───────────────────────────────────
+function TestCoreList({
+  tests,
+  adminUser,
+  onSaved,
+}: {
+  tests: TestCoreRow[] | null;
+  adminUser: AdminUser;
+  onSaved: () => void;
+}) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [instructions, setInstructions] = useState("");
+  const [liveStart, setLiveStart] = useState("");
+  const [liveEnd, setLiveEnd] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function startEdit(t: TestCoreRow) {
+    setEditingId(t.id);
+    setInstructions(t.instructions);
+    setLiveStart(t.liveStart);
+    setLiveEnd(t.liveEnd);
+    setError(null);
+  }
+
+  async function save(id: string) {
+    setError(null);
+    if (new Date(liveEnd) <= new Date(liveStart)) return setError("Live end must be after live start.");
+
+    setSaving(true);
+    try {
+      const token = await adminUser.getIdToken();
+      await updateTestCore({
+        data: { token, id, testCore: { instructions, liveStart, liveEnd } },
+      });
+      setEditingId(null);
+      onSaved();
+    } catch {
+      setError("Could not save. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="clay p-5 sm:p-6">
+      <div className="mb-4 flex items-center gap-2">
+        <FileText className="h-4 w-4 text-foreground/60" />
+        <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-foreground/60">
+          Tests in this bundle
+        </h2>
+      </div>
+
+      {tests === null ? (
+        <div className="flex justify-center py-6">
+          <Loader2 className="h-5 w-5 animate-spin text-foreground/40" />
         </div>
-
-        {tests === null ? (
-          <div className="flex justify-center py-6">
-            <Loader2 className="h-5 w-5 animate-spin text-foreground/40" />
-          </div>
-        ) : tests.length === 0 ? (
-          <p className="text-sm text-foreground/60">No tests added to this bundle yet.</p>
-        ) : (
-          <ul className="space-y-2">
-            {tests.map((t) => (
-              <li key={t.id} className="clay-inset px-4 py-3">
-                {editingId === t.id ? (
-                  <div className="space-y-2">
+      ) : tests.length === 0 ? (
+        <p className="text-sm text-foreground/60">No tests appended to this bundle yet.</p>
+      ) : (
+        <ul className="space-y-2">
+          {tests.map((t) => (
+            <li key={t.id} className="clay-inset px-4 py-3.5">
+              {editingId === t.id ? (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <input
-                      value={editDraft.name ?? ""}
-                      onChange={(e) => setEditDraft((d) => ({ ...d, name: e.target.value }))}
+                      type="datetime-local"
+                      value={liveStart}
+                      onChange={(e) => setLiveStart(e.target.value)}
                       className={inputClass}
                     />
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <input
-                        type="datetime-local"
-                        value={editDraft.liveStart ?? ""}
-                        onChange={(e) => setEditDraft((d) => ({ ...d, liveStart: e.target.value }))}
-                        className={inputClass}
-                      />
-                      <input
-                        type="datetime-local"
-                        value={editDraft.liveEnd ?? ""}
-                        onChange={(e) => setEditDraft((d) => ({ ...d, liveEnd: e.target.value }))}
-                        className={inputClass}
-                      />
-                    </div>
-                    <textarea
-                      value={editDraft.instructions ?? ""}
-                      onChange={(e) => setEditDraft((d) => ({ ...d, instructions: e.target.value }))}
-                      rows={3}
+                    <input
+                      type="datetime-local"
+                      value={liveEnd}
+                      onChange={(e) => setLiveEnd(e.target.value)}
                       className={inputClass}
                     />
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => saveEdit(t.id)}
-                        disabled={savingEdit}
-                        className="clay-btn rounded-full px-4 py-1.5 text-xs font-semibold disabled:opacity-70"
-                      >
-                        {savingEdit ? "Saving…" : "Save"}
-                      </button>
-                      <button
-                        onClick={() => setEditingId(null)}
-                        className="text-xs font-semibold text-foreground/50 hover:text-foreground/70"
-                      >
-                        Cancel
-                      </button>
-                    </div>
                   </div>
-                ) : (
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{t.name}</p>
-                      <p className="text-xs text-foreground/50">
-                        {t.totalQuestions} Qs · {t.subjects.join(", ")} ·{" "}
-                        {new Date(t.liveStart).toLocaleString()} →{" "}
-                        {new Date(t.liveEnd).toLocaleString()}
-                      </p>
-                    </div>
+                  <textarea
+                    value={instructions}
+                    onChange={(e) => setInstructions(e.target.value)}
+                    rows={3}
+                    className={textareaClass}
+                  />
+                  {error && (
+                    <p className="rounded-2xl bg-[var(--coral-soft)]/50 px-4 py-2 text-xs font-medium text-foreground">
+                      {error}
+                    </p>
+                  )}
+                  <div className="flex gap-2">
                     <button
-                      onClick={() => startEdit(t)}
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--sky-deep)] hover:underline"
+                      onClick={() => save(t.id)}
+                      disabled={saving}
+                      className="clay-btn rounded-full px-4 py-1.5 text-xs font-semibold disabled:opacity-70"
                     >
-                      <Pencil className="h-3.5 w-3.5" /> Edit
+                      {saving ? "Saving…" : "Save"}
+                    </button>
+                    <button
+                      onClick={() => setEditingId(null)}
+                      className="text-xs font-semibold text-foreground/50 hover:text-foreground/70"
+                    >
+                      Cancel
                     </button>
                   </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+                </div>
+              ) : (
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">{t.name}</p>
+                    <p className="mt-0.5 text-xs text-foreground/50">
+                      {t.totalQuestions} questions · {t.subjects.join(", ")}
+                    </p>
+                    <p className="mt-0.5 text-xs text-foreground/50">
+                      Live {new Date(t.liveStart).toLocaleString()} → {new Date(t.liveEnd).toLocaleString()}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => startEdit(t)}
+                    className="inline-flex shrink-0 items-center gap-1.5 text-xs font-semibold text-[var(--sky-deep)] hover:underline"
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Edit
+                  </button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

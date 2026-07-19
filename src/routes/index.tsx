@@ -154,10 +154,10 @@ function Hero() {
           mentorship spaces created directly by top AIIMS rankers.
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <Link to="/simulator/live" className="clay-btn group inline-flex items-center gap-2 px-7 py-4 text-base font-bold sm:text-lg">
+          <a href="/simulator/live" className="clay-btn group inline-flex items-center gap-2 px-7 py-4 text-base font-bold sm:text-lg">
             Start Free CBT Mock Test
             <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
-          </Link>
+          </a>
           <a href="#simulator" className="clay-btn-ghost px-6 py-4 text-sm font-semibold sm:text-base">
             Explore Simulator
           </a>
@@ -322,7 +322,7 @@ function FeaturesGrid() {
             </h3>
             <p className="mt-2 text-slate-600">Get ahead of the curve before the official 2027 transition hits.</p>
           </div>
-          <Link to="/simulator/live" className="clay-btn inline-flex items-center gap-2 px-7 py-4 text-base font-bold justify-self-start md:justify-self-end">
+          <Link to={"/simulator/live" as any} className="clay-btn inline-flex items-center gap-2 px-7 py-4 text-base font-bold justify-self-start md:justify-self-end">
             Try Free Mock Test <ArrowRight className="h-5 w-5" />
           </Link>
         </div>

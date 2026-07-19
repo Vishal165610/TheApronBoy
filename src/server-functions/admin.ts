@@ -525,6 +525,17 @@ export const createMentor = createServerFn({ method: "POST" })
       passwordSalt: salt,
       profilePictureUrl: null,
       trackingIndex: "",
+      // Mentor Portal (Module 6b) fields — seeded empty on creation so every
+      // mentor document has a uniform shape from day one. aboutText /
+      // yearOfStudy / introVideoUrl are mentor-editable (updateMyMentorProfile
+      // in mentor-auth.ts); aiimsIitRank / enrolledCollege / pursuedCourse are
+      // Super Admin-only (updateMentorLockedInfo in mentor-auth.ts).
+      aboutText: "",
+      yearOfStudy: "",
+      introVideoUrl: null,
+      aiimsIitRank: "",
+      enrolledCollege: "",
+      pursuedCourse: "",
       createdAt: new Date(),
     });
     return { ok: true, id: String(result.insertedId) };
@@ -649,4 +660,68 @@ export const listAnnouncements = createServerFn({ method: "GET" })
         createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : null,
       })),
     };
+  });
+
+  // ─── Module 12: Mentor Support Ticket Management (Super Admin side) ─────────
+export const listAllMentorTickets = createServerFn({ method: "GET" })
+  .validator((data: { token: string }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin(data.token);
+    const db = await getDb();
+
+    const rows = await db
+      .collection("mentorSupportTickets")
+      .find({})
+      .sort({ createdAt: -1 })
+      .limit(200)
+      .toArray();
+
+    const mentorIds = [...new Set(rows.map((r) => r.mentorId as string))];
+    const { ObjectId } = await import("mongodb");
+    const mentors =
+      mentorIds.length > 0
+        ? await db
+            .collection("mentors")
+            .find({ _id: { $in: mentorIds.map((id) => new ObjectId(id)) } }, { projection: { name: 1 } })
+            .toArray()
+        : [];
+    const nameByMentorId = new Map(mentors.map((m) => [String(m._id), m.name as string]));
+
+    return {
+      tickets: rows.map((r) => ({
+        id: String(r._id),
+        mentorId: r.mentorId as string,
+        mentorName: nameByMentorId.get(r.mentorId as string) ?? "Unknown mentor",
+        category: r.category as string,
+        message: r.message as string,
+        status: r.status as string,
+        adminResponse: (r.adminResponse as string | null) ?? null,
+        respondedAt: r.respondedAt instanceof Date ? r.respondedAt.toISOString() : null,
+        createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : null,
+      })),
+    };
+  });
+
+export const respondToMentorTicket = createServerFn({ method: "POST" })
+  .validator(
+    (data: { token: string; ticketId: string; adminResponse: string; status: "Open" | "In Progress" | "Resolved" }) =>
+      data,
+  )
+  .handler(async ({ data }) => {
+    await requireAdmin(data.token);
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+
+    const result = await db.collection("mentorSupportTickets").updateOne(
+      { _id: new ObjectId(data.ticketId) },
+      {
+        $set: {
+          adminResponse: data.adminResponse.trim() || null,
+          status: data.status,
+          respondedAt: new Date(),
+        },
+      },
+    );
+    if (result.matchedCount === 0) throw new Error("Ticket not found.");
+    return { ok: true };
   });

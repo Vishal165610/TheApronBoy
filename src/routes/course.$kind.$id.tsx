@@ -16,6 +16,13 @@ import {
   Users2,
   BookOpen,
   BarChart3,
+  Trophy,
+  Building2,
+  BookMarked,
+  Video,
+  CalendarClock,
+  Link2,
+  Radio,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { AppHeader } from "@/components/app-header";
@@ -24,6 +31,9 @@ import {
   getPublicMentorshipDetail,
   listPublicTestsForBundle,
   listPublicBundleAnnouncements,
+  listPublicMentorshipAnnouncements,
+  getPublicMentorProfile,
+  listMentorshipSessionsForStudent,
   hasPurchased,
   requestCallback,
   submitSupportTicket,
@@ -63,15 +73,11 @@ export const Route = createFileRoute("/course/$kind/$id")({
 });
 
 type Kind = "bundle" | "mentorship";
-type TabKey = "overview" | "tests" | "assets" | "announcements" | "help";
 
-const TABS: { key: TabKey; label: string; icon: typeof LayoutDashboard }[] = [
-  { key: "overview", label: "Overview", icon: LayoutDashboard },
-  { key: "tests", label: "Tests", icon: ClipboardList },
-  { key: "assets", label: "Assets", icon: FolderOpen },
-  { key: "announcements", label: "Announcements", icon: Megaphone },
-  { key: "help", label: "Help", icon: LifeBuoy },
-];
+// Bundles show Tests; mentorship batches show live Sessions instead — the
+// tab key stays "tests" internally so state/URL patterns don't change, but
+// its label and content swap per kind.
+type TabKey = "overview" | "tests" | "assets" | "announcements" | "help";
 
 type BundleDetail = {
   id: string;
@@ -97,6 +103,19 @@ type MentorshipDetail = {
   discountPercent: number;
   thumbnailUrl: string | null;
   mentor: { name: string; profilePictureUrl: string | null } | null;
+  mentorId: string | null;
+};
+
+type MentorProfile = {
+  id: string;
+  name: string;
+  profilePictureUrl: string | null;
+  aboutText: string;
+  yearOfStudy: string;
+  introVideoUrl: string | null;
+  aiimsIitRank: string;
+  enrolledCollege: string;
+  pursuedCourse: string;
 };
 
 type TestRow = {
@@ -108,12 +127,34 @@ type TestRow = {
   liveEnd: string;
 };
 
+type SessionRow = {
+  id: string;
+  track: "OneOnOne" | "BatchMeet" | "AsyncLecture";
+  meetingLink: string | null;
+  lectureUrl: string | null;
+  lectureTitle: string | null;
+  durationMinutes: number | null;
+  scheduledAt: string;
+  status: "scheduled" | "completed" | "cancelled";
+};
+
 type AnnouncementRow = {
   id: string;
+  title?: string | null;
   message: string | null;
   thumbnailUrl: string | null;
   createdAt: string | null;
 };
+
+function tabsForKind(kind: Kind): { key: TabKey; label: string; icon: typeof LayoutDashboard }[] {
+  return [
+    { key: "overview", label: "Overview", icon: LayoutDashboard },
+    { key: "tests", label: kind === "bundle" ? "Tests" : "Sessions", icon: kind === "bundle" ? ClipboardList : CalendarClock },
+    { key: "assets", label: "Assets", icon: FolderOpen },
+    { key: "announcements", label: "Announcements", icon: Megaphone },
+    { key: "help", label: "Help", icon: LifeBuoy },
+  ];
+}
 
 function CourseHubPage() {
   const { kind, id } = Route.useParams() as { kind: Kind; id: string };
@@ -123,12 +164,16 @@ function CourseHubPage() {
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [bundle, setBundle] = useState<BundleDetail | null>(null);
   const [mentorship, setMentorship] = useState<MentorshipDetail | null>(null);
+  const [mentorProfile, setMentorProfile] = useState<MentorProfile | null>(null);
   const [tests, setTests] = useState<TestRow[] | null>(null);
+  const [sessions, setSessions] = useState<SessionRow[] | null>(null);
   const [announcements, setAnnouncements] = useState<AnnouncementRow[] | null>(null);
   const [isPurchased, setIsPurchased] = useState<boolean | null>(null);
   const [pdfModalUrl, setPdfModalUrl] = useState<string | null>(null);
   const [purchasing, setPurchasing] = useState(false);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
+
+  const TABS = tabsForKind(kind);
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
@@ -152,9 +197,21 @@ function CourseHubPage() {
         setAnnouncements(a as AnnouncementRow[]);
       } else {
         const { batch } = await getPublicMentorshipDetail({ data: { token, batchId: id } });
-        setMentorship(batch as MentorshipDetail | null);
+        const batchDetail = batch as MentorshipDetail | null;
+        setMentorship(batchDetail);
         setTests([]);
-        setAnnouncements([]);
+
+        const [{ sessions: s }, { announcements: a }] = await Promise.all([
+          listMentorshipSessionsForStudent({ data: { token, batchId: id } }),
+          listPublicMentorshipAnnouncements({ data: { token, batchId: id } }),
+        ]);
+        setSessions(s as SessionRow[]);
+        setAnnouncements(a as AnnouncementRow[]);
+
+        if (batchDetail?.mentorId) {
+          const { mentor } = await getPublicMentorProfile({ data: { token, mentorId: batchDetail.mentorId } });
+          setMentorProfile(mentor as MentorProfile | null);
+        }
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -281,13 +338,17 @@ function CourseHubPage() {
               kind={kind}
               bundle={bundle}
               mentorship={mentorship}
+              mentorProfile={mentorProfile}
               isPurchased={isPurchased}
               user={user}
               itemId={id}
             />
           )}
-          {activeTab === "tests" && (
+          {activeTab === "tests" && kind === "bundle" && (
             <TestsTab tests={tests} isPurchased={isPurchased} navigate={navigate} user={user} />
+          )}
+          {activeTab === "tests" && kind === "mentorship" && (
+            <SessionsTab sessions={sessions} isPurchased={isPurchased} />
           )}
           {activeTab === "assets" && (
             <AssetsTab bundle={bundle} isPurchased={isPurchased} onOpenPdf={setPdfModalUrl} />
@@ -395,10 +456,72 @@ function LockGate({ locked, children }: { locked: boolean; children: ReactNode }
   );
 }
 
+// ─── Mentor bio card — surfaces the Mentor Portal's Profile data here ───────
+function MentorBioCard({ mentorProfile }: { mentorProfile: MentorProfile }) {
+  const lockedItems = [
+    { icon: Trophy, label: "AIIMS / IIT Rank", value: mentorProfile.aiimsIitRank },
+    { icon: Building2, label: "College", value: mentorProfile.enrolledCollege },
+    { icon: BookMarked, label: "Course", value: mentorProfile.pursuedCourse },
+  ].filter((i) => i.value?.trim());
+
+  return (
+    <div className="clay p-5 sm:p-6">
+      <div className="flex items-start gap-4">
+        <div className="clay-inset flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full">
+          {mentorProfile.profilePictureUrl ? (
+            <img src={mentorProfile.profilePictureUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <span className="font-display text-xl font-bold text-foreground/50">
+              {mentorProfile.name.charAt(0)}
+            </span>
+          )}
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wide text-foreground/50">Your Mentor</p>
+          <p className="font-display text-lg font-bold text-foreground">{mentorProfile.name}</p>
+          {mentorProfile.yearOfStudy && (
+            <p className="text-xs text-foreground/50">{mentorProfile.yearOfStudy}</p>
+          )}
+        </div>
+      </div>
+
+      {mentorProfile.aboutText && (
+        <p className="mt-4 whitespace-pre-line text-sm leading-relaxed text-foreground/70">
+          {mentorProfile.aboutText}
+        </p>
+      )}
+
+      {mentorProfile.introVideoUrl && (
+        <div className="clay-inset mt-4 overflow-hidden rounded-2xl">
+          <video src={mentorProfile.introVideoUrl} controls className="aspect-video w-full object-cover" />
+        </div>
+      )}
+
+      {lockedItems.length > 0 && (
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {lockedItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <div key={item.label} className="clay-inset px-3.5 py-3">
+                <div className="mb-0.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-foreground/40">
+                  <Icon className="h-3 w-3" />
+                  {item.label}
+                </div>
+                <p className="truncate text-sm font-semibold text-foreground">{item.value}</p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OverviewTab({
   kind,
   bundle,
   mentorship,
+  mentorProfile,
   isPurchased,
   user,
   itemId,
@@ -406,6 +529,7 @@ function OverviewTab({
   kind: Kind;
   bundle: BundleDetail | null;
   mentorship: MentorshipDetail | null;
+  mentorProfile: MentorProfile | null;
   isPurchased: boolean;
   user: { getIdToken: () => Promise<string> };
   itemId: string;
@@ -446,24 +570,12 @@ function OverviewTab({
 
   return (
     <div className="space-y-6">
-      {kind === "mentorship" && mentorship?.mentor && (
+      {kind === "mentorship" && mentorProfile && <MentorBioCard mentorProfile={mentorProfile} />}
+
+      {kind === "mentorship" && mentorship && (
         <div className="clay p-5 sm:p-6">
-          <div className="flex items-center gap-4">
-            <div className="clay-inset flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full">
-              {mentorship.mentor.profilePictureUrl ? (
-                <img src={mentorship.mentor.profilePictureUrl} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <span className="font-display text-xl font-bold text-foreground/50">
-                  {mentorship.mentor.name.charAt(0)}
-                </span>
-              )}
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-foreground/50">Your Mentor</p>
-              <p className="font-display text-lg font-bold text-foreground">{mentorship.mentor.name}</p>
-            </div>
-          </div>
-          <div className="mt-4 space-y-1.5">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-foreground/50">Highlights</p>
+          <div className="space-y-1.5">
             {mentorship.highlights.map((h, i) => (
               <p key={i} className="flex items-start gap-2 text-sm text-foreground/70">
                 <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-[var(--sky-deep)]" />
@@ -569,9 +681,7 @@ function TestsTab({
   user: { getIdToken: () => Promise<string> };
 }) {
   // Per-test attempt summary: undefined = still loading, [] = never attempted.
-  const [attemptsByTest, setAttemptsByTest] = useState<
-    Record<string, { count: number; bestScore: number; totalMarks: number } | undefined>
-  >({});
+  const [attemptsByTest, setAttemptsByTest] = useState<Record<string, { count: number; bestScore: number; totalMarks: number } | undefined>>({});
 
   useEffect(() => {
     if (!tests || tests.length === 0 || !isPurchased) return;
@@ -678,6 +788,100 @@ function TestsTab({
   );
 }
 
+// ─── Live Sessions tab — the mentorship-batch equivalent of Tests ───────────
+// Surfaces Tracks A/B/C from the Mentor Portal's Live Session Scheduler:
+// upcoming 1:1s booked for this specific student, batch-wide meet links,
+// and ingested async lectures with their player links.
+function SessionsTab({ sessions, isPurchased }: { sessions: SessionRow[] | null; isPurchased: boolean }) {
+  if (sessions === null) {
+    return (
+      <div className="flex justify-center py-10">
+        <Loader2 className="h-5 w-5 animate-spin text-foreground/40" />
+      </div>
+    );
+  }
+
+  if (sessions.length === 0) {
+    return (
+      <div className="clay p-8 text-center text-sm text-foreground/60">
+        No live sessions scheduled by your mentor yet — check back soon.
+      </div>
+    );
+  }
+
+  const trackMeta = {
+    OneOnOne: { label: "1:1 Mentorship", icon: Users2 },
+    BatchMeet: { label: "Batch Meet", icon: Video },
+    AsyncLecture: { label: "Recorded Lecture", icon: PlayCircle },
+  } as const;
+
+  return (
+    <div className="space-y-3">
+      {sessions.map((s) => {
+        const meta = trackMeta[s.track];
+        const Icon = meta.icon;
+        const isPast = s.track !== "AsyncLecture" && new Date(s.scheduledAt).getTime() < Date.now();
+
+        return (
+          <LockGate key={s.id} locked={!isPurchased}>
+            <div className="clay flex items-center justify-between gap-3 p-5">
+              <div className="flex items-start gap-3">
+                <div className="clay-inset flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl">
+                  <Icon className="h-4 w-4 text-foreground/50" />
+                </div>
+                <div>
+                  <p className="flex items-center gap-2 font-semibold text-foreground">
+                    {s.track === "AsyncLecture" ? s.lectureTitle : meta.label}
+                    {s.status === "cancelled" && (
+                      <span className="rounded-full bg-[var(--coral-soft)]/50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
+                        Cancelled
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-foreground/50">
+                    {s.track === "AsyncLecture" ? (
+                      <>Available from {new Date(s.scheduledAt).toLocaleString()}</>
+                    ) : (
+                      <>
+                        {new Date(s.scheduledAt).toLocaleString()}
+                        {s.durationMinutes ? ` · ${s.durationMinutes} min` : ""}
+                      </>
+                    )}
+                  </p>
+                  {s.track !== "AsyncLecture" && !isPast && s.status === "scheduled" && (
+                    <span className="mt-1 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--sky-deep)]">
+                      <Radio className="h-3 w-3" /> Upcoming
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {s.status === "scheduled" && (
+                <a
+                  href={s.track === "AsyncLecture" ? s.lectureUrl ?? "#" : s.meetingLink ?? "#"}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="clay-btn flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold"
+                >
+                  {s.track === "AsyncLecture" ? (
+                    <>
+                      <PlayCircle className="h-4 w-4" /> Watch
+                    </>
+                  ) : (
+                    <>
+                      <Link2 className="h-4 w-4" /> Join
+                    </>
+                  )}
+                </a>
+              )}
+            </div>
+          </LockGate>
+        );
+      })}
+    </div>
+  );
+}
+
 function AssetsTab({
   bundle,
   isPurchased,
@@ -752,7 +956,8 @@ function AnnouncementsTab({
           <div className="clay flex gap-3 p-4">
             {a.thumbnailUrl && <img src={a.thumbnailUrl} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover" />}
             <div>
-              {a.message && <p className="text-sm text-foreground">{a.message}</p>}
+              {a.title && <p className="text-sm font-semibold text-foreground">{a.title}</p>}
+              {a.message && <p className="text-sm text-foreground/80">{a.message}</p>}
               <p className="mt-1 text-xs text-foreground/40">
                 {a.createdAt ? new Date(a.createdAt).toLocaleString() : ""}
               </p>

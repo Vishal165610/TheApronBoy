@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Loader2, UserPlus, Users2, Layers3, Pencil, X, Plus } from "lucide-react";
+import { Loader2, UserPlus, Users2, Layers3, Pencil, X, Plus, ShieldCheck, Trophy, Building2, BookMarked } from "lucide-react";
 import type { Mentor, MentorshipBatch, Track } from "@/lib/admin-types";
 import {
   createMentor,
@@ -9,6 +9,7 @@ import {
   listMentorshipBatches,
   updateMentorshipBatch,
 } from "@/server-functions/admin";
+import { updateMentorLockedInfo } from "@/server-functions/mentor-auth";
 
 type AdminUser = { getIdToken: () => Promise<string> };
 
@@ -203,11 +204,22 @@ function MentorList({
   const [trackingIndex, setTrackingIndex] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Locked-credentials sub-form is a fully separate open/close + save state
+  // from the routine profile edit above — deliberately, so an admin editing
+  // a name/photo never has the rank/college fields sitting open at the same
+  // time. Two distinct actions, two distinct panels.
+  const [lockedEditingId, setLockedEditingId] = useState<string | null>(null);
+  const [aiimsIitRank, setAiimsIitRank] = useState("");
+  const [enrolledCollege, setEnrolledCollege] = useState("");
+  const [pursuedCourse, setPursuedCourse] = useState("");
+  const [savingLocked, setSavingLocked] = useState(false);
+  const [lockedError, setLockedError] = useState<string | null>(null);
+
   function startEdit(m: Mentor) {
     setEditingId(m.id);
     setName(m.name);
     setProfilePictureUrl(m.profilePictureUrl ?? "");
-    setTrackingIndex(m.trackingIndex ?? "");
+    setTrackingIndex((m as any).trackingIndex ?? "");
   }
 
   async function save(id: string) {
@@ -225,6 +237,43 @@ function MentorList({
       onSaved();
     } finally {
       setSaving(false);
+    }
+  }
+
+  function startLockedEdit(m: any) {
+    setLockedEditingId(m.id);
+    setAiimsIitRank(m.aiimsIitRank ?? "");
+    setEnrolledCollege(m.enrolledCollege ?? "");
+    setPursuedCourse(m.pursuedCourse ?? "");
+    setLockedError(null);
+  }
+
+  async function saveLocked(id: string) {
+    setLockedError(null);
+    if (!aiimsIitRank.trim()) return setLockedError("Enter the AIIMS/IIT rank.");
+    if (!enrolledCollege.trim()) return setLockedError("Enter the enrolled college.");
+    if (!pursuedCourse.trim()) return setLockedError("Enter the pursued course.");
+
+    setSavingLocked(true);
+    try {
+      const token = await adminUser.getIdToken();
+      await updateMentorLockedInfo({
+        data: {
+          token,
+          mentorId: id,
+          lockedInfo: {
+            aiimsIitRank: aiimsIitRank.trim(),
+            enrolledCollege: enrolledCollege.trim(),
+            pursuedCourse: pursuedCourse.trim(),
+          },
+        },
+      });
+      setLockedEditingId(null);
+      onSaved();
+    } catch (err) {
+      setLockedError(err instanceof Error ? err.message : "Could not save. Try again.");
+    } finally {
+      setSavingLocked(false);
     }
   }
 
@@ -293,16 +342,98 @@ function MentorList({
                     <div>
                       <p className="text-sm font-semibold text-foreground">{m.name}</p>
                       <p className="text-xs text-foreground/50">
-                        @{m.username} {m.trackingIndex && `· ${m.trackingIndex}`}
+                        @{m.username} {(m as any).trackingIndex && `· ${(m as any).trackingIndex}`}
                       </p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => startEdit(m)}
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--sky-deep)] hover:underline"
-                  >
-                    <Pencil className="h-3.5 w-3.5" /> Edit
-                  </button>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <button
+                      onClick={() => startEdit(m)}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--sky-deep)] hover:underline"
+                    >
+                      <Pencil className="h-3.5 w-3.5" /> Edit
+                    </button>
+                    <button
+                      onClick={() => startLockedEdit(m)}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-foreground/60 hover:text-foreground"
+                    >
+                      <ShieldCheck className="h-3.5 w-3.5" /> Locked info
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Locked Credentials & Verification sub-form ──────────── */}
+              {lockedEditingId === m.id && (
+                <div className="clay mt-3 border border-foreground/10 p-4">
+                  <div className="mb-3 flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-[var(--sky-deep)]" />
+                    <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-foreground/70">
+                      Locked Credentials &amp; Verification
+                    </h3>
+                  </div>
+                  <p className="mb-3 text-xs text-foreground/50">
+                    These values render as read-only in the mentor's own portal. Only Super Admin
+                    can set or change them here.
+                  </p>
+
+                  <div className="space-y-2">
+                    <ClayField label="AIIMS / IIT Rank">
+                      <div className="relative">
+                        <Trophy className="pointer-events-none absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-foreground/30" />
+                        <input
+                          value={aiimsIitRank}
+                          onChange={(e) => setAiimsIitRank(e.target.value)}
+                          placeholder="e.g. AIR 412 (AIIMS)"
+                          className={inputClass + " pl-10"}
+                        />
+                      </div>
+                    </ClayField>
+                    <ClayField label="Enrolled College">
+                      <div className="relative">
+                        <Building2 className="pointer-events-none absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-foreground/30" />
+                        <input
+                          value={enrolledCollege}
+                          onChange={(e) => setEnrolledCollege(e.target.value)}
+                          placeholder="e.g. AIIMS New Delhi"
+                          className={inputClass + " pl-10"}
+                        />
+                      </div>
+                    </ClayField>
+                    <ClayField label="Pursued Course">
+                      <div className="relative">
+                        <BookMarked className="pointer-events-none absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-foreground/30" />
+                        <input
+                          value={pursuedCourse}
+                          onChange={(e) => setPursuedCourse(e.target.value)}
+                          placeholder="e.g. MBBS"
+                          className={inputClass + " pl-10"}
+                        />
+                      </div>
+                    </ClayField>
+                  </div>
+
+                  {lockedError && (
+                    <p className="mt-3 rounded-2xl bg-[var(--coral-soft)]/50 px-4 py-2 text-xs font-medium text-foreground">
+                      {lockedError}
+                    </p>
+                  )}
+
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={() => saveLocked(m.id)}
+                      disabled={savingLocked}
+                      className="clay-btn rounded-full px-4 py-1.5 text-xs font-semibold disabled:opacity-70"
+                    >
+                      {savingLocked ? "Saving…" : "Save locked info"}
+                    </button>
+                    <button
+                      onClick={() => setLockedEditingId(null)}
+                      className="text-xs font-semibold text-foreground/50 hover:text-foreground/70"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               )}
             </li>

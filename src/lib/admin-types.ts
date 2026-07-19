@@ -99,6 +99,139 @@ export type MentorshipBatch = {
   createdAt: string | null;
 };
 
+// ─── Module 6b: Mentor Portal — Extended Profile ────────────────────────────
+// Appends onto the base `Mentor` type. AIIMS/IIT Rank, Enrolled College, and
+// Pursued Course are ONLY ever written by createMentor/updateMentorLockedInfo
+// (Super Admin side) — the mentor-facing updateMyMentorProfile server
+// function must never accept these three keys in its input type, enforced
+// at the type level via MentorProfileUpdateInput below.
+export type YearOfStudy =
+  | "1st Year"
+  | "2nd Year"
+  | "3rd Year"
+  | "4th Year"
+  | "5th Year"
+  | "Internship"
+  | "Post-Graduation";
+
+export type MentorProfileExtended = Mentor & {
+  aboutText: string; // full academic + career roadmap, mentor-editable
+  yearOfStudy: YearOfStudy | "";
+  introVideoUrl: string | null; // .mp4, mentor-editable
+
+  // 🚨 Locked — Super Admin write-only, rendered read-only in the mentor UI
+  aiimsIitRank: string; // e.g. "AIR 412 (AIIMS)" — free text, admin sets format
+  enrolledCollege: string;
+  pursuedCourse: string;
+};
+
+// Fields the mentor is permitted to submit via the self-service profile form.
+// Deliberately excludes aiimsIitRank / enrolledCollege / pursuedCourse.
+export type MentorProfileUpdateInput = {
+  name: string;
+  profilePictureUrl: string | null;
+  aboutText: string;
+  yearOfStudy: YearOfStudy | "";
+  introVideoUrl: string | null;
+};
+
+// Fields ONLY the Super Admin dashboard is allowed to write.
+export type MentorLockedInfoInput = {
+  aiimsIitRank: string;
+  enrolledCollege: string;
+  pursuedCourse: string;
+};
+
+// ─── Module 9: Live Session Scheduler (Tracks A / B / C) ────────────────────
+export type SessionTrack = "OneOnOne" | "BatchMeet" | "AsyncLecture";
+export type SessionStatus = "scheduled" | "completed" | "cancelled";
+
+export type MentorshipSession = {
+  id: string;
+  mentorId: string;
+  batchId: string; // the mentorship batch this session is scoped to
+  track: SessionTrack;
+
+  // Track A: 1:1 Personal Mentorship
+  studentUid: string | null; // required when track === "OneOnOne"
+  durationMinutes: number | null; // hard cap enforced server-side: <= 180
+
+  // Track B: Complete Batch Meet
+  meetingLink: string | null; // live video room link, required for A & B
+
+  // Track C: Async Lecture Ingestion
+  lectureUrl: string | null; // Cloudflare Stream / Bunny.net player URL
+  lectureTitle: string | null;
+
+  scheduledAt: string; // ISO datetime
+  status: SessionStatus;
+  createdAt: string | null;
+};
+
+// Per-student counter used to enforce the <= 20 one-on-one session limit.
+// Derived server-side via aggregation over `mentorshipSessions`, not stored
+// directly — included here so the client-side type contract is explicit.
+export type StudentSessionUsage = {
+  studentUid: string;
+  sessionsUsed: number; // out of max 20
+  sessionsRemaining: number;
+};
+
+// Track C: moderated comment thread beneath a lecture asset.
+export type LectureComment = {
+  id: string;
+  sessionId: string; // the MentorshipSession (track "AsyncLecture") this belongs to
+  studentUid: string;
+  studentName: string;
+  body: string;
+  hidden: boolean; // moderation: mentor can hide without deleting
+  createdAt: string | null;
+};
+
+// ─── Module 10: Targeted Batch Announcements (with email trigger) ──────────
+export type MentorAnnouncement = {
+  id: string;
+  mentorId: string;
+  batchId: string;
+  title: string;
+  message: string;
+  emailTriggered: boolean; // whether an email broadcast was requested on submit
+  emailStatus: "pending" | "sent" | "failed" | "not_requested";
+  emailSentAt: string | null;
+  recipientCount: number | null; // resolved student count at send time
+  createdAt: string | null;
+};
+
+export type MentorAnnouncementInput = {
+  batchId: string;
+  title: string;
+  message: string;
+  triggerEmail: boolean;
+};
+
+// ─── Module 11: Support Ticketing (mentor-facing, extended for admin replies) ─
+export type TicketCategory = "Technical Issue" | "Batch/Student Error" | "Payout Queries" | "General Doubts";
+export type TicketStatus = "Open" | "In Progress" | "Resolved";
+
+// Extends the existing platform `supportTickets` collection shape used by
+// students (see student-data.ts / batch-hub.ts) with mentor-specific fields
+// and the admin-response fields that were previously missing entirely.
+export type MentorSupportTicket = {
+  id: string;
+  mentorId: string;
+  category: TicketCategory;
+  message: string;
+  status: TicketStatus;
+  adminResponse: string | null;
+  respondedAt: string | null;
+  createdAt: string | null;
+};
+
+export type MentorSupportTicketInput = {
+  category: TicketCategory;
+  message: string;
+};
+
 // ─── Module 7: Razorpay Transaction Ledger ──────────────────────────────────
 export type Transaction = {
   id: string;
@@ -134,4 +267,40 @@ export type Student360 = {
   purchasedBundles: { bundleId: string; bundleTitle: string; purchasedAt: string }[];
   purchasedMentorshipBatches: { batchId: string; batchName: string; purchasedAt: string }[];
   testAttempts: TestAttemptSummary[];
+};
+
+// ─── Module 4: Chat Desk & Document Gate ────────────────────────────────────
+export type ChatSender = "mentor" | "student";
+
+export type ChatThread = {
+  studentUid: string;
+  studentName: string;
+  lastMessage: string;
+  lastMessageAt: string | null;
+  lastSender: ChatSender;
+};
+
+export type ChatMessage = {
+  id: string;
+  sender: ChatSender;
+  body: string;
+  createdAt: string | null;
+};
+
+export type ChatLockWindow = {
+  openFrom: string; // "HH:MM", 24-hour
+  openUntil: string;
+};
+
+export type MentorNote = {
+  id: string;
+  fileName: string;
+  fileUrl: string;
+  watermarkApplied: boolean;
+  createdAt: string | null;
+};
+
+// ─── Module 12: Admin view of mentor tickets (adds mentorName for display) ──
+export type AdminMentorTicketView = MentorSupportTicket & {
+  mentorName: string;
 };
