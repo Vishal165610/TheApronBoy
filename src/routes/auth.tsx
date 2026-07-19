@@ -143,11 +143,11 @@ function AuthPage() {
 
         {/* Logo */}
         <div className="mb-6 flex flex-col items-center gap-3">
-          <div className="clay flex h-16 w-16 items-center justify-center p-2">
+          <div className="clay flex h-12 w-auto items-center justify-center p-2 sm:h-14">
             <img
-              src="https://i.postimg.cc/WztCwkGB/Edurack.jpg"
+              src="https://i.postimg.cc/4NvD69v0/image-removebg-preview.png"
               alt="Edurack"
-              className="h-full w-full object-contain"
+              className="h-10 w-auto object-contain sm:h-12"
               onError={(e) => {
                 (e.currentTarget as HTMLImageElement).style.display = "none";
               }}

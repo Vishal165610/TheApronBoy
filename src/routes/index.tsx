@@ -22,7 +22,6 @@ export const Route = createFileRoute("/")({
 
 // Path to the platform's official logo asset. Update once the final
 // exported .png is dropped into /public/assets/branding.
-const LOGO_SRC = "/assets/branding/edurack-logo.png";
 
 // ---------------------------------------------
 // Navigation config
@@ -81,19 +80,16 @@ function Header() {
   return (
     <header className="sticky top-0 z-50 px-3 pt-3 sm:px-6 sm:pt-5">
       <div className="clay-sm mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-        <Link to="/" className="flex min-w-0 items-center gap-2.5">
+        <Link to="/" className="flex min-w-0 items-center gap-3">
           <img
-            src={LOGO_SRC}
+            src="https://i.postimg.cc/4NvD69v0/image-removebg-preview.png"
             alt="EDURACK"
-            className="h-9 w-auto shrink-0"
-            width={36}
-            height={36}
+            className="h-10 w-auto shrink-0 object-contain sm:h-12"
           />
-          <span className="truncate font-display text-lg font-bold tracking-tight sm:text-xl">
+          <span className="truncate font-display text-xl font-bold tracking-tight">
             EDURACK
           </span>
         </Link>
-
         <nav className="hidden items-center gap-1 md:flex">
           {navLinks.map((l) => (
             <NavItem key={l.label} link={l} />
@@ -413,11 +409,9 @@ function Footer() {
           <div>
             <Link to="/" className="flex items-center gap-2">
               <img
-                src={LOGO_SRC}
+                src="https://i.postimg.cc/4NvD69v0/image-removebg-preview.png"
                 alt="EDURACK"
-                className="h-7 w-auto shrink-0"
-                width={28}
-                height={28}
+                className="h-10 w-auto shrink-0 object-contain sm:h-12"
               />
               <span className="font-display text-lg font-bold">EDURACK</span>
             </Link>

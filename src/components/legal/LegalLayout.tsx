@@ -23,15 +23,13 @@ export function LegalLayout({ icon: Icon, eyebrow, title, lastUpdated, children 
     <div className="min-h-screen px-4 py-10 sm:px-6 lg:py-16">
       <div className="mx-auto max-w-3xl">
         <div className="flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2.5">
+          <Link to="/" className="flex items-center gap-3">
             <img
-              src={LOGO_SRC}
+              src="https://i.postimg.cc/4NvD69v0/image-removebg-preview.png"
               alt="EDURACK"
-              width={32}
-              height={32}
-              className="h-8 w-auto shrink-0"
+              className="h-10 w-auto shrink-0 object-contain sm:h-12"
             />
-            <span className="font-display text-base font-bold tracking-tight text-slate-900">
+            <span className="font-display text-xl font-bold tracking-tight text-slate-900">
               EDURACK
             </span>
           </Link>

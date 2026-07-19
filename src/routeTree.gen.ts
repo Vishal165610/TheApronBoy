@@ -9,7 +9,10 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as PurchasesRouteImport } from './routes/purchases'
+import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as JoinMentorRouteImport } from './routes/join-mentor'
+import { Route as HelpRouteImport } from './routes/help'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ContactRouteImport } from './routes/contact'
@@ -26,9 +29,24 @@ import { Route as AdminDashboardRouteImport } from './routes/admin.dashboard'
 import { Route as AdminAuthRouteImport } from './routes/admin.auth'
 import { Route as CourseKindIdRouteImport } from './routes/course.$kind.$id'
 
+const PurchasesRoute = PurchasesRouteImport.update({
+  id: '/purchases',
+  path: '/purchases',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const JoinMentorRoute = JoinMentorRouteImport.update({
   id: '/join-mentor',
   path: '/join-mentor',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HelpRoute = HelpRouteImport.update({
+  id: '/help',
+  path: '/help',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
@@ -113,7 +131,10 @@ export interface FileRoutesByFullPath {
   '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/help': typeof HelpRoute
   '/join-mentor': typeof JoinMentorRoute
+  '/profile': typeof ProfileRoute
+  '/purchases': typeof PurchasesRoute
   '/admin/auth': typeof AdminAuthRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/legal/privacy': typeof LegalPrivacyRoute
@@ -131,7 +152,10 @@ export interface FileRoutesByTo {
   '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/help': typeof HelpRoute
   '/join-mentor': typeof JoinMentorRoute
+  '/profile': typeof ProfileRoute
+  '/purchases': typeof PurchasesRoute
   '/admin/auth': typeof AdminAuthRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/legal/privacy': typeof LegalPrivacyRoute
@@ -150,7 +174,10 @@ export interface FileRoutesById {
   '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/help': typeof HelpRoute
   '/join-mentor': typeof JoinMentorRoute
+  '/profile': typeof ProfileRoute
+  '/purchases': typeof PurchasesRoute
   '/admin/auth': typeof AdminAuthRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/legal/privacy': typeof LegalPrivacyRoute
@@ -170,7 +197,10 @@ export interface FileRouteTypes {
     | '/contact'
     | '/dashboard'
     | '/forgot-password'
+    | '/help'
     | '/join-mentor'
+    | '/profile'
+    | '/purchases'
     | '/admin/auth'
     | '/admin/dashboard'
     | '/legal/privacy'
@@ -188,7 +218,10 @@ export interface FileRouteTypes {
     | '/contact'
     | '/dashboard'
     | '/forgot-password'
+    | '/help'
     | '/join-mentor'
+    | '/profile'
+    | '/purchases'
     | '/admin/auth'
     | '/admin/dashboard'
     | '/legal/privacy'
@@ -206,7 +239,10 @@ export interface FileRouteTypes {
     | '/contact'
     | '/dashboard'
     | '/forgot-password'
+    | '/help'
     | '/join-mentor'
+    | '/profile'
+    | '/purchases'
     | '/admin/auth'
     | '/admin/dashboard'
     | '/legal/privacy'
@@ -225,7 +261,10 @@ export interface RootRouteChildren {
   ContactRoute: typeof ContactRoute
   DashboardRoute: typeof DashboardRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
+  HelpRoute: typeof HelpRoute
   JoinMentorRoute: typeof JoinMentorRoute
+  ProfileRoute: typeof ProfileRoute
+  PurchasesRoute: typeof PurchasesRoute
   AdminAuthRoute: typeof AdminAuthRoute
   AdminDashboardRoute: typeof AdminDashboardRoute
   LegalPrivacyRoute: typeof LegalPrivacyRoute
@@ -240,11 +279,32 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/purchases': {
+      id: '/purchases'
+      path: '/purchases'
+      fullPath: '/purchases'
+      preLoaderRoute: typeof PurchasesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/join-mentor': {
       id: '/join-mentor'
       path: '/join-mentor'
       fullPath: '/join-mentor'
       preLoaderRoute: typeof JoinMentorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/help': {
+      id: '/help'
+      path: '/help'
+      fullPath: '/help'
+      preLoaderRoute: typeof HelpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/forgot-password': {
@@ -361,7 +421,10 @@ const rootRouteChildren: RootRouteChildren = {
   ContactRoute: ContactRoute,
   DashboardRoute: DashboardRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
+  HelpRoute: HelpRoute,
   JoinMentorRoute: JoinMentorRoute,
+  ProfileRoute: ProfileRoute,
+  PurchasesRoute: PurchasesRoute,
   AdminAuthRoute: AdminAuthRoute,
   AdminDashboardRoute: AdminDashboardRoute,
   LegalPrivacyRoute: LegalPrivacyRoute,

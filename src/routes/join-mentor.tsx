@@ -330,16 +330,14 @@ function JoinMentorPage() {
 
 function BrandHeader() {
   return (
-    <Link to="/" className="flex items-center justify-center">
-      {/* Platform logo — sourced from the shared branding asset path */}
+    <Link to="/" className="flex items-center justify-center gap-3">
+      {/* Platform logo — sourced from direct Postimg URL */}
       <img
-        src={LOGO_SRC}
+        src="https://i.postimg.cc/4NvD69v0/image-removebg-preview.png"
         alt="EDURACK"
-        width={40}
-        height={40}
-        className="h-10 w-10 shrink-0 rounded-xl object-contain"
+        className="h-10 w-auto shrink-0 object-contain sm:h-12"
       />
-      <span className="ml-2.5 font-display text-xl font-bold tracking-tight text-slate-900">
+      <span className="font-display text-xl font-bold tracking-tight text-slate-900">
         EDURACK
       </span>
     </Link>
