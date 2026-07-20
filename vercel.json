@@ -14,12 +14,12 @@
           "value": "same-origin-allow-popups" 
         },
         {
-          "key": "Content-Security-Policy",
-          "value": "frame-ancestors 'none';"
-        },
-        {
           "key": "X-Frame-Options",
           "value": "DENY"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://apis.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://i.postimg.cc; frame-src 'self' https://findmedoctor-57feb.firebaseapp.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com; frame-ancestors 'none';"
         }
       ]
     },
@@ -27,12 +27,12 @@
       "source": "/__/auth/(.*)",
       "headers": [
         {
-          "key": "Content-Security-Policy",
-          "value": "frame-ancestors 'self';"
-        },
-        {
           "key": "X-Frame-Options",
           "value": "SAMEORIGIN"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://apis.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://i.postimg.cc; frame-src 'self' https://findmedoctor-57feb.firebaseapp.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com; frame-ancestors 'self';"
         }
       ]
     }
