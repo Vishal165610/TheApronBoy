@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import type { MentorProfileExtended, YearOfStudy } from "@/lib/admin-types";
 import { getMentorProfile, updateMyMentorProfile } from "@/server-functions/mentor-auth";
+import { VideoPlayer } from "@/components/clay-video-player";
 
 const YEAR_OPTIONS: YearOfStudy[] = [
   "1st Year",
@@ -280,7 +281,7 @@ function IntroVideoUploader({
       <div className="clay-inset overflow-hidden rounded-2xl">
         <div className="relative flex aspect-video items-center justify-center bg-[var(--sky-soft)]/60">
           {displaySrc ? (
-            <video src={displaySrc} controls className="h-full w-full object-cover" />
+            displaySrc && <VideoPlayer src={displaySrc} />
           ) : (
             <div className="flex flex-col items-center gap-2 text-foreground/40">
               <Play className="h-8 w-8" strokeWidth={1.5} />

@@ -25,6 +25,7 @@ import { Route as MentorDashboardRouteImport } from './routes/mentor.dashboard'
 import { Route as LegalTermsRouteImport } from './routes/legal/terms'
 import { Route as LegalRefundRouteImport } from './routes/legal/refund'
 import { Route as LegalPrivacyRouteImport } from './routes/legal/privacy'
+import { Route as LectureSessionIdRouteImport } from './routes/lecture.$sessionId'
 import { Route as AdminDashboardRouteImport } from './routes/admin.dashboard'
 import { Route as AdminAuthRouteImport } from './routes/admin.auth'
 import { Route as CourseKindIdRouteImport } from './routes/course.$kind.$id'
@@ -109,6 +110,11 @@ const LegalPrivacyRoute = LegalPrivacyRouteImport.update({
   path: '/legal/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LectureSessionIdRoute = LectureSessionIdRouteImport.update({
+  id: '/lecture/$sessionId',
+  path: '/lecture/$sessionId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminDashboardRoute = AdminDashboardRouteImport.update({
   id: '/admin/dashboard',
   path: '/admin/dashboard',
@@ -137,6 +143,7 @@ export interface FileRoutesByFullPath {
   '/purchases': typeof PurchasesRoute
   '/admin/auth': typeof AdminAuthRoute
   '/admin/dashboard': typeof AdminDashboardRoute
+  '/lecture/$sessionId': typeof LectureSessionIdRoute
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/refund': typeof LegalRefundRoute
   '/legal/terms': typeof LegalTermsRoute
@@ -158,6 +165,7 @@ export interface FileRoutesByTo {
   '/purchases': typeof PurchasesRoute
   '/admin/auth': typeof AdminAuthRoute
   '/admin/dashboard': typeof AdminDashboardRoute
+  '/lecture/$sessionId': typeof LectureSessionIdRoute
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/refund': typeof LegalRefundRoute
   '/legal/terms': typeof LegalTermsRoute
@@ -180,6 +188,7 @@ export interface FileRoutesById {
   '/purchases': typeof PurchasesRoute
   '/admin/auth': typeof AdminAuthRoute
   '/admin/dashboard': typeof AdminDashboardRoute
+  '/lecture/$sessionId': typeof LectureSessionIdRoute
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/refund': typeof LegalRefundRoute
   '/legal/terms': typeof LegalTermsRoute
@@ -203,6 +212,7 @@ export interface FileRouteTypes {
     | '/purchases'
     | '/admin/auth'
     | '/admin/dashboard'
+    | '/lecture/$sessionId'
     | '/legal/privacy'
     | '/legal/refund'
     | '/legal/terms'
@@ -224,6 +234,7 @@ export interface FileRouteTypes {
     | '/purchases'
     | '/admin/auth'
     | '/admin/dashboard'
+    | '/lecture/$sessionId'
     | '/legal/privacy'
     | '/legal/refund'
     | '/legal/terms'
@@ -245,6 +256,7 @@ export interface FileRouteTypes {
     | '/purchases'
     | '/admin/auth'
     | '/admin/dashboard'
+    | '/lecture/$sessionId'
     | '/legal/privacy'
     | '/legal/refund'
     | '/legal/terms'
@@ -267,6 +279,7 @@ export interface RootRouteChildren {
   PurchasesRoute: typeof PurchasesRoute
   AdminAuthRoute: typeof AdminAuthRoute
   AdminDashboardRoute: typeof AdminDashboardRoute
+  LectureSessionIdRoute: typeof LectureSessionIdRoute
   LegalPrivacyRoute: typeof LegalPrivacyRoute
   LegalRefundRoute: typeof LegalRefundRoute
   LegalTermsRoute: typeof LegalTermsRoute
@@ -391,6 +404,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LegalPrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/lecture/$sessionId': {
+      id: '/lecture/$sessionId'
+      path: '/lecture/$sessionId'
+      fullPath: '/lecture/$sessionId'
+      preLoaderRoute: typeof LectureSessionIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/dashboard': {
       id: '/admin/dashboard'
       path: '/admin/dashboard'
@@ -427,6 +447,7 @@ const rootRouteChildren: RootRouteChildren = {
   PurchasesRoute: PurchasesRoute,
   AdminAuthRoute: AdminAuthRoute,
   AdminDashboardRoute: AdminDashboardRoute,
+  LectureSessionIdRoute: LectureSessionIdRoute,
   LegalPrivacyRoute: LegalPrivacyRoute,
   LegalRefundRoute: LegalRefundRoute,
   LegalTermsRoute: LegalTermsRoute,

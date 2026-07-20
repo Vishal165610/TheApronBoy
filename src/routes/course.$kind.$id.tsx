@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { AppHeader } from "@/components/app-header";
+import { VideoPlayer } from "@/components/clay-video-player";
 import {
   getPublicBundleDetail,
   getPublicMentorshipDetail,
@@ -492,8 +493,8 @@ function MentorBioCard({ mentorProfile }: { mentorProfile: MentorProfile }) {
       )}
 
       {mentorProfile.introVideoUrl && (
-        <div className="clay-inset mt-4 overflow-hidden rounded-2xl">
-          <video src={mentorProfile.introVideoUrl} controls className="aspect-video w-full object-cover" />
+        <div className="mt-4">
+          <VideoPlayer src={mentorProfile.introVideoUrl} />
         </div>
       )}
 
@@ -788,11 +789,10 @@ function TestsTab({
   );
 }
 
-// ─── Live Sessions tab — the mentorship-batch equivalent of Tests ───────────
-// Surfaces Tracks A/B/C from the Mentor Portal's Live Session Scheduler:
-// upcoming 1:1s booked for this specific student, batch-wide meet links,
-// and ingested async lectures with their player links.
 function SessionsTab({ sessions, isPurchased }: { sessions: SessionRow[] | null; isPurchased: boolean }) {
+  const navigate = useNavigate();
+  const [expandedLectureId, setExpandedLectureId] = useState<string | null>(null);
+
   if (sessions === null) {
     return (
       <div className="flex justify-center py-10">
@@ -821,58 +821,69 @@ function SessionsTab({ sessions, isPurchased }: { sessions: SessionRow[] | null;
         const meta = trackMeta[s.track];
         const Icon = meta.icon;
         const isPast = s.track !== "AsyncLecture" && new Date(s.scheduledAt).getTime() < Date.now();
+        const isExpanded = expandedLectureId === s.id;
 
         return (
           <LockGate key={s.id} locked={!isPurchased}>
-            <div className="clay flex items-center justify-between gap-3 p-5">
-              <div className="flex items-start gap-3">
-                <div className="clay-inset flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl">
-                  <Icon className="h-4 w-4 text-foreground/50" />
-                </div>
-                <div>
-                  <p className="flex items-center gap-2 font-semibold text-foreground">
-                    {s.track === "AsyncLecture" ? s.lectureTitle : meta.label}
-                    {s.status === "cancelled" && (
-                      <span className="rounded-full bg-[var(--coral-soft)]/50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
-                        Cancelled
+            <div className="clay p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="clay-inset flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl">
+                    <Icon className="h-4 w-4 text-foreground/50" />
+                  </div>
+                  <div>
+                    <p className="flex items-center gap-2 font-semibold text-foreground">
+                      {s.track === "AsyncLecture" ? s.lectureTitle : meta.label}
+                      {s.status === "cancelled" && (
+                        <span className="rounded-full bg-[var(--coral-soft)]/50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
+                          Cancelled
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-xs text-foreground/50">
+                      {s.track === "AsyncLecture" ? (
+                        <>Available from {new Date(s.scheduledAt).toLocaleString()}</>
+                      ) : (
+                        <>
+                          {new Date(s.scheduledAt).toLocaleString()}
+                          {s.durationMinutes ? ` · ${s.durationMinutes} min` : ""}
+                        </>
+                      )}
+                    </p>
+                    {s.track !== "AsyncLecture" && !isPast && s.status === "scheduled" && (
+                      <span className="mt-1 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--sky-deep)]">
+                        <Radio className="h-3 w-3" /> Upcoming
                       </span>
                     )}
-                  </p>
-                  <p className="text-xs text-foreground/50">
-                    {s.track === "AsyncLecture" ? (
-                      <>Available from {new Date(s.scheduledAt).toLocaleString()}</>
-                    ) : (
-                      <>
-                        {new Date(s.scheduledAt).toLocaleString()}
-                        {s.durationMinutes ? ` · ${s.durationMinutes} min` : ""}
-                      </>
-                    )}
-                  </p>
-                  {s.track !== "AsyncLecture" && !isPast && s.status === "scheduled" && (
-                    <span className="mt-1 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--sky-deep)]">
-                      <Radio className="h-3 w-3" /> Upcoming
-                    </span>
-                  )}
+                  </div>
                 </div>
+
+                {s.status === "scheduled" && s.track === "AsyncLecture" && (
+                  <button
+                    onClick={() => navigate({ to: "/lecture/$sessionId", params: { sessionId: s.id } })}
+                    className="clay-btn flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold"
+                  >
+                    <PlayCircle className="h-4 w-4" />
+                    Watch
+                  </button>
+                )}
+
+                {s.status === "scheduled" && s.track !== "AsyncLecture" && (
+                  <a
+                    href={s.meetingLink ?? "#"}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="clay-btn flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold"
+                  >
+                    <Link2 className="h-4 w-4" /> Join
+                  </a>
+                )}
               </div>
 
-              {s.status === "scheduled" && (
-                <a
-                  href={s.track === "AsyncLecture" ? s.lectureUrl ?? "#" : s.meetingLink ?? "#"}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="clay-btn flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold"
-                >
-                  {s.track === "AsyncLecture" ? (
-                    <>
-                      <PlayCircle className="h-4 w-4" /> Watch
-                    </>
-                  ) : (
-                    <>
-                      <Link2 className="h-4 w-4" /> Join
-                    </>
-                  )}
-                </a>
+              {isExpanded && s.lectureUrl && (
+                <div className="mt-4">
+                  <VideoPlayer src={s.lectureUrl} />
+                </div>
               )}
             </div>
           </LockGate>

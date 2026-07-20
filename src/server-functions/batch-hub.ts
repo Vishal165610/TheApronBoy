@@ -286,3 +286,104 @@ export const listPublicMentorshipAnnouncements = createServerFn({ method: "GET" 
       })),
     };
   });
+
+export const getLectureSessionForStudent = createServerFn({ method: "GET" })
+  .validator((data: { token: string; sessionId: string }) => data)
+  .handler(async ({ data }) => {
+    const decoded = await requireSignedIn(data.token);
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+
+    const session = await db.collection("mentorshipSessions").findOne({ _id: new ObjectId(data.sessionId) });
+    if (!session) throw new Error("Lecture not found.");
+    if (session.track !== "AsyncLecture") throw new Error("This session is not a recorded lecture.");
+
+    const purchase = await db
+      .collection("purchases")
+      .findOne({ uid: decoded.uid, itemType: "mentorship", itemId: session.batchId as string });
+    if (!purchase) throw new Error("You have not purchased this mentorship batch.");
+
+    let mentorName: string | null = null;
+    const batch = await db.collection("mentorshipBatches").findOne({ _id: new ObjectId(session.batchId as string) });
+    if (batch?.assignedMentorId) {
+      const mentor = await db
+        .collection("mentors")
+        .findOne({ _id: new ObjectId(batch.assignedMentorId as string) });
+      mentorName = (mentor?.name as string) ?? null;
+    }
+
+    return {
+      session: {
+        id: String(session._id),
+        batchId: session.batchId as string,
+        batchName: (batch?.name as string) ?? "Mentorship Batch",
+        mentorName,
+        lectureTitle: (session.lectureTitle as string) ?? "Lecture",
+        lectureUrl: session.lectureUrl as string,
+        scheduledAt: session.scheduledAt as string,
+      },
+    };
+  });
+
+export const listLectureCommentsForStudent = createServerFn({ method: "GET" })
+  .validator((data: { token: string; sessionId: string }) => data)
+  .handler(async ({ data }) => {
+    const decoded = await requireSignedIn(data.token);
+    const db = await getDb();
+
+    const rows = await db
+      .collection("lectureComments")
+      .find({ sessionId: data.sessionId })
+      .sort({ createdAt: 1 })
+      .toArray();
+
+    // Hidden comments are invisible to every student except the one who
+    // posted it — a student should still see their own comment (so it
+    // doesn't look like it silently vanished), but not other students'
+    // hidden ones.
+    const visible = rows.filter((r) => !r.hidden || r.studentUid === decoded.uid);
+
+    return {
+      comments: visible.map((r) => ({
+        id: String(r._id),
+        studentUid: r.studentUid as string,
+        studentName: r.studentName as string,
+        body: r.body as string,
+        isOwn: r.studentUid === decoded.uid,
+        hidden: Boolean(r.hidden),
+        createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : null,
+      })),
+    };
+  });
+
+export const postLectureCommentAsStudent = createServerFn({ method: "POST" })
+  .validator((data: { token: string; sessionId: string; body: string }) => data)
+  .handler(async ({ data }) => {
+    const decoded = await requireSignedIn(data.token);
+    if (!data.body.trim()) throw new Error("Comment cannot be empty.");
+
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+
+    const session = await db.collection("mentorshipSessions").findOne({ _id: new ObjectId(data.sessionId) });
+    if (!session) throw new Error("Lecture not found.");
+
+    const purchase = await db
+      .collection("purchases")
+      .findOne({ uid: decoded.uid, itemType: "mentorship", itemId: session.batchId as string });
+    if (!purchase) throw new Error("You have not purchased this mentorship batch.");
+
+    const profile = await db.collection("profiles").findOne({ uid: decoded.uid });
+    const studentName = (profile?.fullName as string) || "Student";
+
+    await db.collection("lectureComments").insertOne({
+      sessionId: data.sessionId,
+      studentUid: decoded.uid,
+      studentName,
+      body: data.body.trim(),
+      hidden: false,
+      createdAt: new Date(),
+    });
+
+    return { ok: true };
+  });
