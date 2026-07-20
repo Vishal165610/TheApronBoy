@@ -387,3 +387,151 @@ export const postLectureCommentAsStudent = createServerFn({ method: "POST" })
 
     return { ok: true };
   });
+
+  // ─── Lecture watch progress tracking ────────────────────────────────────────
+export const updateLectureProgress = createServerFn({ method: "POST" })
+  .validator((data: { token: string; sessionId: string; watchedSeconds: number; durationSeconds: number }) => data)
+  .handler(async ({ data }) => {
+    const decoded = await requireSignedIn(data.token);
+    const db = await getDb();
+
+    // 90% watched counts as complete — accommodates outros/credits that
+    // most students skip without it counting against them.
+    const completed = data.durationSeconds > 0 && data.watchedSeconds / data.durationSeconds >= 0.9;
+
+    await db.collection("lectureProgress").updateOne(
+      { sessionId: data.sessionId, studentUid: decoded.uid },
+      {
+        $set: {
+          sessionId: data.sessionId,
+          studentUid: decoded.uid,
+          watchedSeconds: Math.max(data.watchedSeconds, 0),
+          durationSeconds: data.durationSeconds,
+          completed,
+          lastWatchedAt: new Date(),
+        },
+      },
+      { upsert: true },
+    );
+    return { ok: true, completed };
+  });
+
+export const getMyLectureProgress = createServerFn({ method: "GET" })
+  .validator((data: { token: string; sessionId: string }) => data)
+  .handler(async ({ data }) => {
+    const decoded = await requireSignedIn(data.token);
+    const db = await getDb();
+    const row = await db
+      .collection("lectureProgress")
+      .findOne({ sessionId: data.sessionId, studentUid: decoded.uid });
+    if (!row) return { progress: null };
+    return {
+      progress: {
+        watchedSeconds: row.watchedSeconds as number,
+        durationSeconds: row.durationSeconds as number,
+        completed: Boolean(row.completed),
+      },
+    };
+  });
+
+// Batched status lookup for the batch's Sessions tab — one call instead of
+// one per session. Returns watch-progress for AsyncLecture rows and this
+// student's own review (if any) for every session in the batch, live or
+// recorded.
+export const listMySessionStatuses = createServerFn({ method: "GET" })
+  .validator((data: { token: string; batchId: string }) => data)
+  .handler(async ({ data }) => {
+    const decoded = await requireSignedIn(data.token);
+    const db = await getDb();
+
+    const sessions = await db.collection("mentorshipSessions").find({ batchId: data.batchId }).toArray();
+    const sessionIds = sessions.map((s) => String(s._id));
+    if (sessionIds.length === 0) return { statuses: [] };
+
+    const [progressRows, reviewRows] = await Promise.all([
+      db.collection("lectureProgress").find({ sessionId: { $in: sessionIds }, studentUid: decoded.uid }).toArray(),
+      db.collection("sessionReviews").find({ sessionId: { $in: sessionIds }, studentUid: decoded.uid }).toArray(),
+    ]);
+
+    const progressBySession = new Map(progressRows.map((p) => [p.sessionId as string, p]));
+    const reviewBySession = new Map(reviewRows.map((r) => [r.sessionId as string, r]));
+
+    return {
+      statuses: sessionIds.map((id) => {
+        const p = progressBySession.get(id);
+        const r = reviewBySession.get(id);
+        const watchPercent =
+          p && (p.durationSeconds as number) > 0
+            ? Math.min(100, Math.round(((p.watchedSeconds as number) / (p.durationSeconds as number)) * 100))
+            : 0;
+        return {
+          sessionId: id,
+          watchPercent,
+          completedLecture: Boolean(p?.completed),
+          myRating: (r?.rating as number | undefined) ?? null,
+        };
+      }),
+    };
+  });
+
+// ─── Session reviews (ratings) — works across all three tracks ─────────────
+export const submitSessionReview = createServerFn({ method: "POST" })
+  .validator((data: { token: string; sessionId: string; batchId: string; rating: number; reviewText: string }) => data)
+  .handler(async ({ data }) => {
+    const decoded = await requireSignedIn(data.token);
+    if (data.rating < 1 || data.rating > 5) throw new Error("Rating must be between 1 and 5.");
+
+    const db = await getDb();
+    await db.collection("sessionReviews").updateOne(
+      { sessionId: data.sessionId, studentUid: decoded.uid },
+      {
+        $set: {
+          sessionId: data.sessionId,
+          batchId: data.batchId,
+          studentUid: decoded.uid,
+          rating: data.rating,
+          reviewText: data.reviewText.trim(),
+          updatedAt: new Date(),
+        },
+        $setOnInsert: { createdAt: new Date() },
+      },
+      { upsert: true },
+    );
+    return { ok: true };
+  });
+
+export const getMySessionReview = createServerFn({ method: "GET" })
+  .validator((data: { token: string; sessionId: string }) => data)
+  .handler(async ({ data }) => {
+    const decoded = await requireSignedIn(data.token);
+    const db = await getDb();
+    const row = await db.collection("sessionReviews").findOne({ sessionId: data.sessionId, studentUid: decoded.uid });
+    if (!row) return { review: null };
+    return { review: { rating: row.rating as number, reviewText: (row.reviewText as string) ?? "" } };
+  });
+
+// ─── Student-facing read of mentor-uploaded batch notes ────────────────────
+// Notes are scoped to the batch (not per-lecture) in the current schema —
+// shown on the lecture page as reference material for that batch overall.
+export const listMentorNotesForStudent = createServerFn({ method: "GET" })
+  .validator((data: { token: string; batchId: string }) => data)
+  .handler(async ({ data }) => {
+    const decoded = await requireSignedIn(data.token);
+    const db = await getDb();
+
+    const purchase = await db
+      .collection("purchases")
+      .findOne({ uid: decoded.uid, itemType: "mentorship", itemId: data.batchId });
+    if (!purchase) return { notes: [] };
+
+    const rows = await db.collection("mentorNotes").find({ batchId: data.batchId }).sort({ createdAt: -1 }).toArray();
+
+    return {
+      notes: rows.map((r) => ({
+        id: String(r._id),
+        fileName: r.fileName as string,
+        fileUrl: r.fileUrl as string,
+        watermarkApplied: Boolean(r.watermarkApplied),
+      })),
+    };
+  });

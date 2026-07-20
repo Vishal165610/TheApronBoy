@@ -1,5 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { MoreVertical, CheckCircle2 } from "lucide-react";
+import { ClayStarRating } from "@/components/clay-star-rating";
+import { submitSessionReview, getMySessionReview, listMySessionStatuses } from "@/server-functions/batch-hub";
 import {
   Loader2,
   LayoutDashboard,
@@ -349,7 +352,7 @@ function CourseHubPage() {
             <TestsTab tests={tests} isPurchased={isPurchased} navigate={navigate} user={user} />
           )}
           {activeTab === "tests" && kind === "mentorship" && (
-            <SessionsTab sessions={sessions} isPurchased={isPurchased} />
+            <SessionsTab sessions={sessions} isPurchased={isPurchased} batchId={id} user={user} />
           )}
           {activeTab === "assets" && (
             <AssetsTab bundle={bundle} isPurchased={isPurchased} onOpenPdf={setPdfModalUrl} />
@@ -789,9 +792,32 @@ function TestsTab({
   );
 }
 
-function SessionsTab({ sessions, isPurchased }: { sessions: SessionRow[] | null; isPurchased: boolean }) {
+type SessionStatus = { sessionId: string; watchPercent: number; completedLecture: boolean; myRating: number | null };
+
+function SessionsTab({
+  sessions,
+  isPurchased,
+  batchId,
+  user,
+}: {
+  sessions: SessionRow[] | null;
+  isPurchased: boolean;
+  batchId: string;
+  user: { getIdToken: () => Promise<string> };
+}) {
   const navigate = useNavigate();
-  const [expandedLectureId, setExpandedLectureId] = useState<string | null>(null);
+  const [statuses, setStatuses] = useState<Record<string, SessionStatus> | null>(null);
+
+  async function refreshStatuses() {
+    const token = await user.getIdToken();
+    const { statuses: rows } = await listMySessionStatuses({ data: { token, batchId } });
+    setStatuses(Object.fromEntries(rows.map((r) => [r.sessionId, r])));
+  }
+
+  useEffect(() => {
+    if (sessions && sessions.length > 0) refreshStatuses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessions, batchId]);
 
   if (sessions === null) {
     return (
@@ -821,74 +847,201 @@ function SessionsTab({ sessions, isPurchased }: { sessions: SessionRow[] | null;
         const meta = trackMeta[s.track];
         const Icon = meta.icon;
         const isPast = s.track !== "AsyncLecture" && new Date(s.scheduledAt).getTime() < Date.now();
-        const isExpanded = expandedLectureId === s.id;
+        const status = statuses?.[s.id];
+
+        let watchBadge: ReactNode = null;
+        if (s.track === "AsyncLecture") {
+          if (status?.completedLecture) {
+            watchBadge = (
+              <span className="inline-flex items-center gap-1 rounded-full bg-[var(--mint-soft)]/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-foreground">
+                <CheckCircle2 className="h-3 w-3" /> Watched
+              </span>
+            );
+          } else if ((status?.watchPercent ?? 0) > 0) {
+            watchBadge = (
+              <span className="rounded-full bg-[var(--lemon-soft)]/70 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-foreground">
+                {status?.watchPercent}% watched
+              </span>
+            );
+          } else {
+            watchBadge = (
+              <span className="rounded-full bg-foreground/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-foreground/50">
+                Not watched
+              </span>
+            );
+          }
+        } else if (s.status === "completed") {
+          watchBadge = (
+            <span className="inline-flex items-center gap-1 rounded-full bg-[var(--mint-soft)]/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-foreground">
+              <CheckCircle2 className="h-3 w-3" /> Attended
+            </span>
+          );
+        } else if (!isPast && s.status === "scheduled") {
+          watchBadge = (
+            <span className="inline-flex items-center gap-1 rounded-full bg-foreground/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--sky-deep)]">
+              <Radio className="h-3 w-3" /> Upcoming
+            </span>
+          );
+        }
+
+        const primaryLabel =
+          s.track === "AsyncLecture"
+            ? status?.completedLecture
+              ? "Revise"
+              : (status?.watchPercent ?? 0) > 0
+                ? "Continue"
+                : "Watch"
+            : "Join";
 
         return (
           <LockGate key={s.id} locked={!isPurchased}>
-            <div className="clay p-5">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <div className="clay-inset flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl">
-                    <Icon className="h-4 w-4 text-foreground/50" />
-                  </div>
-                  <div>
-                    <p className="flex items-center gap-2 font-semibold text-foreground">
-                      {s.track === "AsyncLecture" ? s.lectureTitle : meta.label}
-                      {s.status === "cancelled" && (
-                        <span className="rounded-full bg-[var(--coral-soft)]/50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
-                          Cancelled
-                        </span>
-                      )}
-                    </p>
-                    <p className="text-xs text-foreground/50">
-                      {s.track === "AsyncLecture" ? (
-                        <>Available from {new Date(s.scheduledAt).toLocaleString()}</>
-                      ) : (
-                        <>
-                          {new Date(s.scheduledAt).toLocaleString()}
-                          {s.durationMinutes ? ` · ${s.durationMinutes} min` : ""}
-                        </>
-                      )}
-                    </p>
-                    {s.track !== "AsyncLecture" && !isPast && s.status === "scheduled" && (
-                      <span className="mt-1 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--sky-deep)]">
-                        <Radio className="h-3 w-3" /> Upcoming
+            <div className="clay flex items-center justify-between gap-3 p-5">
+              <div className="flex items-start gap-3">
+                <div className="clay-inset flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl">
+                  <Icon className="h-4 w-4 text-foreground/50" />
+                </div>
+                <div>
+                  <p className="flex flex-wrap items-center gap-2 font-semibold text-foreground">
+                    {s.track === "AsyncLecture" ? s.lectureTitle : meta.label}
+                    {s.status === "cancelled" && (
+                      <span className="rounded-full bg-[var(--coral-soft)]/50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
+                        Cancelled
                       </span>
                     )}
-                  </div>
+                    {watchBadge}
+                  </p>
+                  <p className="text-xs text-foreground/50">
+                    {s.track === "AsyncLecture" ? (
+                      <>Available from {new Date(s.scheduledAt).toLocaleString()}</>
+                    ) : (
+                      <>
+                        {new Date(s.scheduledAt).toLocaleString()}
+                        {s.durationMinutes ? ` · ${s.durationMinutes} min` : ""}
+                      </>
+                    )}
+                  </p>
                 </div>
-
-                {s.status === "scheduled" && s.track === "AsyncLecture" && (
-                  <button
-                    onClick={() => navigate({ to: "/lecture/$sessionId", params: { sessionId: s.id } })}
-                    className="clay-btn flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold"
-                  >
-                    <PlayCircle className="h-4 w-4" />
-                    Watch
-                  </button>
-                )}
-
-                {s.status === "scheduled" && s.track !== "AsyncLecture" && (
-                  <a
-                    href={s.meetingLink ?? "#"}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="clay-btn flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold"
-                  >
-                    <Link2 className="h-4 w-4" /> Join
-                  </a>
-                )}
               </div>
 
-              {isExpanded && s.lectureUrl && (
-                <div className="mt-4">
-                  <VideoPlayer src={s.lectureUrl} />
-                </div>
-              )}
+              <div className="flex shrink-0 items-center gap-1.5">
+                {s.status === "scheduled" &&
+                  (s.track === "AsyncLecture" ? (
+                    <button
+                      onClick={() => navigate({ to: "/lecture/$sessionId", params: { sessionId: s.id } })}
+                      className="clay-btn flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold"
+                    >
+                      <PlayCircle className="h-4 w-4" />
+                      {primaryLabel}
+                    </button>
+                  ) : (
+                    <a
+                      href={s.meetingLink ?? "#"}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="clay-btn flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold"
+                    >
+                      <Link2 className="h-4 w-4" />
+                      {primaryLabel}
+                    </a>
+                  ))}
+
+                <SessionKebabMenu
+                  sessionId={s.id}
+                  batchId={batchId}
+                  user={user}
+                  initialRating={status?.myRating ?? 0}
+                  onSaved={refreshStatuses}
+                />
+              </div>
             </div>
           </LockGate>
         );
       })}
+    </div>
+  );
+}
+
+// ─── Three-dot review menu — available on every session row, all tracks ────
+function SessionKebabMenu({
+  sessionId,
+  batchId,
+  user,
+  initialRating,
+  onSaved,
+}: {
+  sessionId: string;
+  batchId: string;
+  user: { getIdToken: () => Promise<string> };
+  initialRating: number;
+  onSaved: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [rating, setRating] = useState(initialRating);
+  const [reviewText, setReviewText] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  async function handleOpen() {
+    setOpen((v) => !v);
+    if (!loaded) {
+      const token = await user.getIdToken();
+      const { review } = await getMySessionReview({ data: { token, sessionId } });
+      if (review) {
+        setRating(review.rating);
+        setReviewText(review.reviewText);
+      }
+      setLoaded(true);
+    }
+  }
+
+  async function handleSave() {
+    if (rating === 0) return;
+    setSaving(true);
+    try {
+      const token = await user.getIdToken();
+      await submitSessionReview({ data: { token, sessionId, batchId, rating, reviewText } });
+      setOpen(false);
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={handleOpen}
+        className="flex h-9 w-9 items-center justify-center rounded-full text-foreground/50 hover:bg-foreground/5"
+        aria-label="Review this session"
+      >
+        <MoreVertical className="h-4 w-4" />
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="clay absolute right-0 top-full z-20 mt-2 w-64 p-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground/50">
+              Rate this session
+            </p>
+            <ClayStarRating value={rating} onChange={setRating} size="sm" />
+            <textarea
+              value={reviewText}
+              onChange={(e) => setReviewText(e.target.value)}
+              placeholder="Optional feedback…"
+              rows={2}
+              className="clay-inset mt-2 w-full resize-none rounded-xl px-3 py-2 text-xs text-foreground placeholder:text-foreground/40 focus:outline-none"
+            />
+            <button
+              onClick={handleSave}
+              disabled={rating === 0 || saving}
+              className="clay-btn mt-2 w-full rounded-full py-1.5 text-xs font-semibold disabled:opacity-70"
+            >
+              {saving ? "Saving…" : "Submit review"}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

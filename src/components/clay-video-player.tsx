@@ -12,11 +12,8 @@ import {
 } from "lucide-react";
 
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
+const PROGRESS_REPORT_INTERVAL_MS = 5000;
 
-// Direct-playable sources: raw file extensions or an HLS manifest. Anything
-// else (a bare Cloudflare Stream/YouTube/Bunny "player page" URL) can't be
-// attached to a native <video> element, so the caller should fall back to
-// an iframe for those instead of rendering this component.
 export function isDirectPlayableUrl(url: string): boolean {
   const clean = url.split("?")[0].toLowerCase();
   return clean.endsWith(".mp4") || clean.endsWith(".webm") || clean.endsWith(".m3u8") || clean.endsWith(".mov");
@@ -33,14 +30,27 @@ export function ClayVideoPlayer({
   src,
   poster,
   autoPlay = false,
+  initialTime = 0,
+  onProgress,
+  onEnded,
 }: {
   src: string;
   poster?: string;
   autoPlay?: boolean;
+  // Seconds to resume from — the lecture page passes this in from saved
+  // progress so a student picks up where they left off.
+  initialTime?: number;
+  // Fired at most once every 5s while playing, on pause, and on end — the
+  // caller (lecture page) uses this to persist watch progress server-side
+  // without hammering the API on every timeupdate tick.
+  onProgress?: (currentTime: number, duration: number) => void;
+  onEnded?: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hideControlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastReportRef = useRef(0);
+  const hasSeekedToInitial = useRef(false);
 
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -57,39 +67,64 @@ export function ClayVideoPlayer({
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+    hasSeekedToInitial.current = false;
 
     const onLoadedMetadata = () => {
       setDuration(video.duration);
       setIsLoading(false);
+      // Resume from saved progress once, and only if it isn't within the
+      // last 5 seconds (avoids immediately re-triggering "completed").
+      if (!hasSeekedToInitial.current && initialTime > 0 && initialTime < video.duration - 5) {
+        video.currentTime = initialTime;
+      }
+      hasSeekedToInitial.current = true;
     };
-    const onTimeUpdate = () => setCurrentTime(video.currentTime);
-    const onProgress = () => {
-      if (video.buffered.length > 0) {
-        setBuffered(video.buffered.end(video.buffered.length - 1));
+    const reportProgress = () => {
+      if (onProgress && video.duration) onProgress(video.currentTime, video.duration);
+    };
+    const onTimeUpdate = () => {
+      setCurrentTime(video.currentTime);
+      const now = Date.now();
+      if (onProgress && video.duration && now - lastReportRef.current > PROGRESS_REPORT_INTERVAL_MS) {
+        lastReportRef.current = now;
+        onProgress(video.currentTime, video.duration);
       }
     };
+    const onProgressEvent = () => {
+      if (video.buffered.length > 0) setBuffered(video.buffered.end(video.buffered.length - 1));
+    };
     const onPlay = () => setPlaying(true);
-    const onPause = () => setPlaying(false);
+    const onPause = () => {
+      setPlaying(false);
+      reportProgress();
+    };
     const onWaiting = () => setIsLoading(true);
     const onPlaying = () => setIsLoading(false);
+    const onEndedHandler = () => {
+      reportProgress();
+      onEnded?.();
+    };
 
     video.addEventListener("loadedmetadata", onLoadedMetadata);
     video.addEventListener("timeupdate", onTimeUpdate);
-    video.addEventListener("progress", onProgress);
+    video.addEventListener("progress", onProgressEvent);
     video.addEventListener("play", onPlay);
     video.addEventListener("pause", onPause);
     video.addEventListener("waiting", onWaiting);
     video.addEventListener("playing", onPlaying);
+    video.addEventListener("ended", onEndedHandler);
 
     return () => {
       video.removeEventListener("loadedmetadata", onLoadedMetadata);
       video.removeEventListener("timeupdate", onTimeUpdate);
-      video.removeEventListener("progress", onProgress);
+      video.removeEventListener("progress", onProgressEvent);
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("playing", onPlaying);
+      video.removeEventListener("ended", onEndedHandler);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src]);
 
   useEffect(() => {
@@ -195,13 +230,11 @@ export function ClayVideoPlayer({
         </button>
       )}
 
-      {/* ── Control bar ─────────────────────────────────────────────── */}
       <div
         className={`absolute inset-x-0 bottom-0 flex flex-col gap-2 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-3 pb-2.5 pt-6 transition-opacity duration-300 ${
           controlsVisible ? "opacity-100" : "opacity-0"
         }`}
       >
-        {/* Seek bar */}
         <div
           className="group/seek relative h-1.5 w-full cursor-pointer rounded-full bg-white/25"
           onClick={(e) => {
@@ -210,10 +243,7 @@ export function ClayVideoPlayer({
           }}
         >
           <div className="absolute inset-y-0 left-0 rounded-full bg-white/40" style={{ width: `${bufferedFraction * 100}%` }} />
-          <div
-            className="absolute inset-y-0 left-0 rounded-full bg-[var(--sky-deep)]"
-            style={{ width: `${progressFraction * 100}%` }}
-          />
+          <div className="absolute inset-y-0 left-0 rounded-full bg-[var(--sky-deep)]" style={{ width: `${progressFraction * 100}%` }} />
           <div
             className="absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-white opacity-0 shadow transition-opacity group-hover/seek:opacity-100"
             style={{ left: `calc(${progressFraction * 100}% - 6px)` }}
@@ -287,13 +317,28 @@ export function ClayVideoPlayer({
   );
 }
 
-// Falls back to an iframe when the URL isn't a direct-playable file/manifest
-// (e.g. a Cloudflare Stream/Bunny "player page" embed link rather than its
-// raw .m3u8/.mp4 asset URL). Keeps every existing saved lectureUrl working
-// even before mentors switch to pasting direct manifest links.
-export function VideoPlayer({ src, poster }: { src: string; poster?: string }) {
+// Falls back to an iframe for non-direct-playable URLs (embed pages rather
+// than raw .m3u8/.mp4 assets). NOTE: progress tracking and resume only work
+// through ClayVideoPlayer — an iframe embed can't report playback position,
+// so watch-progress features are unavailable for lectures saved with an
+// embed-style URL rather than a direct manifest/file URL.
+export function VideoPlayer({
+  src,
+  poster,
+  initialTime,
+  onProgress,
+  onEnded,
+}: {
+  src: string;
+  poster?: string;
+  initialTime?: number;
+  onProgress?: (currentTime: number, duration: number) => void;
+  onEnded?: () => void;
+}) {
   if (isDirectPlayableUrl(src)) {
-    return <ClayVideoPlayer src={src} poster={poster} />;
+    return (
+      <ClayVideoPlayer src={src} poster={poster} initialTime={initialTime} onProgress={onProgress} onEnded={onEnded} />
+    );
   }
   return (
     <div className="clay-inset aspect-video w-full overflow-hidden rounded-2xl">
