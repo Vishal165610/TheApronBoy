@@ -16,6 +16,19 @@ import { MentorAnnouncementModule } from "@/components/mentor-announcement-modul
 import { MentorSchedulerModule } from "@/components/mentor-scheduler-module";
 import { MentorChatModule } from "@/components/mentor-chat-module";
 import { MentorSupportModule } from "@/components/mentor-support-module";
+import { Library } from "lucide-react";
+import { MentorLectureLibraryModule } from "@/components/mentor-lecture-library-module";
+
+type ModuleKey = "profile" | "announcements" | "scheduler" | "chat" | "support" | "library";
+
+const MODULES: { key: ModuleKey; label: string; icon: typeof User }[] = [
+  { key: "profile", label: "Profile", icon: User },
+  { key: "announcements", label: "Announcements", icon: Megaphone },
+  { key: "scheduler", label: "Live Sessions", icon: CalendarClock },
+  { key: "library", label: "Lecture Library", icon: Library },
+  { key: "chat", label: "Chat Desk", icon: MessageSquare },
+  { key: "support", label: "Help Desk", icon: LifeBuoy },
+];
 
 export const Route = createFileRoute("/mentor/dashboard")({
   head: () => ({
@@ -27,19 +40,7 @@ export const Route = createFileRoute("/mentor/dashboard")({
   component: MentorDashboardPage,
 });
 
-// Same storage key admin.auth.tsx's MentorSignInForm writes to on successful
-// login — this route is the sole reader of it.
 const MENTOR_SESSION_KEY = "mentor_session_token";
-
-type ModuleKey = "profile" | "announcements" | "scheduler" | "chat" | "support";
-
-const MODULES: { key: ModuleKey; label: string; icon: typeof User }[] = [
-  { key: "profile", label: "Profile", icon: User },
-  { key: "announcements", label: "Announcements", icon: Megaphone },
-  { key: "scheduler", label: "Live Sessions", icon: CalendarClock },
-  { key: "chat", label: "Chat Desk", icon: MessageSquare },
-  { key: "support", label: "Help Desk", icon: LifeBuoy },
-];
 
 type MentorIdentity = {
   id: string;
@@ -162,6 +163,7 @@ function MentorDashboardPage() {
           {activeModule === "profile" && <MentorProfileModule mentorToken={mentorToken} />}
           {activeModule === "announcements" && <MentorAnnouncementModule mentorToken={mentorToken} />}
           {activeModule === "scheduler" && <MentorSchedulerModule mentorToken={mentorToken} />}
+          {activeModule === "library" && <MentorLectureLibraryModule mentorToken={mentorToken} />}
           {activeModule === "chat" && <MentorChatModule mentorToken={mentorToken} />}
           {activeModule === "support" && <MentorSupportModule mentorToken={mentorToken} />}
         </div>

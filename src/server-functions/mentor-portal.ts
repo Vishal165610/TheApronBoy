@@ -7,7 +7,95 @@ import { createServerFn } from "@tanstack/react-start";
 import { getDb } from "@/lib/mongo";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { MentorAnnouncement, MentorAnnouncementInput } from "@/lib/admin-types";
+import { PDFDocument, rgb, degrees, StandardFonts } from "pdf-lib";
 
+
+async function watermarkPdf(sourceUrl: string): Promise<string> {
+  const response = await fetch(sourceUrl);
+  if (!response.ok) {
+    throw new Error("Could not fetch the PDF from that URL. Make sure it's publicly accessible.");
+  }
+  const originalBytes = await response.arrayBuffer();
+
+  const pdfDoc = await PDFDocument.load(originalBytes);
+  const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const pages = pdfDoc.getPages();
+
+  for (const page of pages) {
+    const { width, height } = page.getSize();
+    const text = "EDURACK";
+    const fontSize = Math.min(width, height) / 6;
+    const textWidth = font.widthOfTextAtSize(text, fontSize);
+
+    // One large diagonal watermark centered on the page, low-opacity so it
+    // sits behind the readable content rather than obscuring it.
+    page.drawText(text, {
+      x: width / 2 - textWidth / 2,
+      y: height / 2,
+      size: fontSize,
+      font,
+      color: rgb(0.55, 0.55, 0.55),
+      opacity: 0.18,
+      rotate: degrees(45),
+    });
+
+    // A second, smaller repeating pass in the corners so cropping out the
+    // center watermark doesn't remove all traces of it.
+    const smallSize = fontSize / 3;
+    const smallWidth = font.widthOfTextAtSize(text, smallSize);
+    const corners: [number, number][] = [
+      [smallWidth / 2 + 20, height - 30],
+      [width - smallWidth / 2 - 20, 30],
+    ];
+    for (const [x, y] of corners) {
+      page.drawText(text, {
+        x: x - smallWidth / 2,
+        y,
+        size: smallSize,
+        font,
+        color: rgb(0.55, 0.55, 0.55),
+        opacity: 0.25,
+        rotate: degrees(45),
+      });
+    }
+  }
+
+  const watermarkedBytes = await pdfDoc.save();
+  const base64 = Buffer.from(watermarkedBytes).toString("base64");
+  return `data:application/pdf;base64,${base64}`;
+}
+
+export const uploadMentorNote = createServerFn({ method: "POST" })
+  .validator(
+    (data: { token: string; batchId: string; fileName: string; fileUrl: string; copyrightAcknowledged: boolean }) =>
+      data,
+  )
+  .handler(async ({ data }) => {
+    const mentorId = await requireMentor(data.token);
+    await requireOwnsBatch(mentorId, data.batchId);
+
+    if (!data.copyrightAcknowledged) {
+      throw new Error("You must acknowledge the copyright safety toggle before uploading.");
+    }
+    if (!data.fileUrl.trim() || !data.fileName.trim()) {
+      throw new Error("Provide the uploaded file's name and URL.");
+    }
+
+    const watermarkedDataUri = await watermarkPdf(data.fileUrl.trim());
+
+    const db = await getDb();
+    const result = await db.collection("mentorNotes").insertOne({
+      mentorId,
+      batchId: data.batchId,
+      fileName: data.fileName.trim(),
+      originalFileUrl: data.fileUrl.trim(),
+      fileUrl: watermarkedDataUri,
+      copyrightAcknowledged: true,
+      watermarkApplied: true,
+      createdAt: new Date(),
+    });
+    return { ok: true, id: String(result.insertedId) };
+  });
 // ─── Mentor session verification (mirrors mentor-auth.ts) ───────────────────
 // Duplicated rather than imported to keep this file's only dependency on
 // mentor-auth.ts being the shared token format, not a function coupling.
@@ -208,6 +296,8 @@ export const listMentorAnnouncements = createServerFn({ method: "POST" })
       emailSentAt: (r.emailSentAt as string | null) ?? null,
       recipientCount: (r.recipientCount as number | null) ?? null,
       createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : null,
+      pinned: Boolean(r.pinned),
+      editedAt: r.editedAt instanceof Date ? r.editedAt.toISOString() : null,
     }));
 
     return { announcements };
@@ -683,42 +773,6 @@ export const getChatLockWindow = createServerFn({ method: "POST" })
     };
   });
 
-// ─── Watermark Compliance Enforcer (PDF note uploads) ───────────────────────
-// NOTE: there's no real PDF watermarking pipeline wired up yet (no
-// pdf-lib/similar dependency confirmed in this project). This records the
-// mentor's compliance acknowledgment and the resulting note metadata with
-// watermarkApplied: false, following the same "flag as pending" convention
-// used for cbtEngineSynced and the intro-video upload — swapping in a real
-// watermarking step later only touches this one function's body.
-export const uploadMentorNote = createServerFn({ method: "POST" })
-  .validator(
-    (data: { token: string; batchId: string; fileName: string; fileUrl: string; copyrightAcknowledged: boolean }) =>
-      data,
-  )
-  .handler(async ({ data }) => {
-    const mentorId = await requireMentor(data.token);
-    await requireOwnsBatch(mentorId, data.batchId);
-
-    if (!data.copyrightAcknowledged) {
-      throw new Error("You must acknowledge the copyright safety toggle before uploading.");
-    }
-    if (!data.fileUrl.trim() || !data.fileName.trim()) {
-      throw new Error("Provide the uploaded file's name and URL.");
-    }
-
-    const db = await getDb();
-    const result = await db.collection("mentorNotes").insertOne({
-      mentorId,
-      batchId: data.batchId,
-      fileName: data.fileName.trim(),
-      fileUrl: data.fileUrl.trim(),
-      copyrightAcknowledged: true,
-      watermarkApplied: false, // real watermarking pipeline pending
-      createdAt: new Date(),
-    });
-    return { ok: true, id: String(result.insertedId) };
-  });
-
 export const listMentorNotes = createServerFn({ method: "POST" })
   .validator((data: { token: string; batchId: string }) => data)
   .handler(async ({ data }) => {
@@ -788,4 +842,175 @@ export const listMyMentorTickets = createServerFn({ method: "POST" })
     }));
 
     return { tickets };
+  });
+
+export const listMyLectureLibrary = createServerFn({ method: "POST" })
+  .validator((data: { token: string }) => data)
+  .handler(async ({ data }) => {
+    const mentorId = await requireMentor(data.token);
+    const db = await getDb();
+
+    const lectures = await db
+      .collection("mentorshipSessions")
+      .find({ mentorId, track: "AsyncLecture" })
+      .sort({ scheduledAt: -1 })
+      .toArray();
+    if (lectures.length === 0) return { lectures: [] };
+
+    const sessionIds = lectures.map((l) => String(l._id));
+    const batchIds = [...new Set(lectures.map((l) => l.batchId as string))];
+    const { ObjectId } = await import("mongodb");
+
+    const [batches, progressRows, commentRows, reviewRows] = await Promise.all([
+      db.collection("mentorshipBatches").find({ _id: { $in: batchIds.map((id) => new ObjectId(id)) } }).toArray(),
+      db.collection("lectureProgress").find({ sessionId: { $in: sessionIds } }).toArray(),
+      db.collection("lectureComments").find({ sessionId: { $in: sessionIds }, hidden: { $ne: true } }).toArray(),
+      db.collection("sessionReviews").find({ sessionId: { $in: sessionIds } }).toArray(),
+    ]);
+
+    const batchNameById = new Map(batches.map((b) => [String(b._id), b.name as string]));
+
+    return {
+      lectures: lectures.map((l) => {
+        const sessionId = String(l._id);
+        const progress = progressRows.filter((p) => p.sessionId === sessionId);
+        const completedCount = progress.filter((p) => p.completed).length;
+        const commentCount = commentRows.filter((c) => c.sessionId === sessionId).length;
+        const reviews = reviewRows.filter((r) => r.sessionId === sessionId);
+        const avgRating = reviews.length > 0 ? reviews.reduce((sum, r) => sum + (r.rating as number), 0) / reviews.length : null;
+
+        return {
+          id: sessionId,
+          batchId: l.batchId as string,
+          batchName: batchNameById.get(l.batchId as string) ?? "Batch",
+          lectureTitle: l.lectureTitle as string,
+          lectureUrl: l.lectureUrl as string,
+          scheduledAt: l.scheduledAt as string,
+          viewerCount: progress.length,
+          completedCount,
+          commentCount,
+          avgRating: avgRating !== null ? Math.round(avgRating * 10) / 10 : null,
+          reviewCount: reviews.length,
+        };
+      }),
+    };
+  });
+
+  export const togglePinAnnouncement = createServerFn({ method: "POST" })
+  .validator((data: { token: string; announcementId: string; pinned: boolean }) => data)
+  .handler(async ({ data }) => {
+    const mentorId = await requireMentor(data.token);
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+    const row = await db.collection("mentorshipBatchAnnouncements").findOne({ _id: new ObjectId(data.announcementId) });
+    if (!row || row.mentorId !== mentorId) throw new Error("Announcement not found.");
+    await db.collection("mentorshipBatchAnnouncements").updateOne(
+      { _id: new ObjectId(data.announcementId) },
+      { $set: { pinned: data.pinned } },
+    );
+    return { ok: true };
+  });
+
+const EDIT_WINDOW_MS = 15 * 60 * 1000;
+
+export const editMentorAnnouncement = createServerFn({ method: "POST" })
+  .validator((data: { token: string; announcementId: string; title: string; message: string }) => data)
+  .handler(async ({ data }) => {
+    const mentorId = await requireMentor(data.token);
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+    const row = await db.collection("mentorshipBatchAnnouncements").findOne({ _id: new ObjectId(data.announcementId) });
+    if (!row || row.mentorId !== mentorId) throw new Error("Announcement not found.");
+
+    const age = Date.now() - (row.createdAt as Date).getTime();
+    if (age > EDIT_WINDOW_MS) throw new Error("This announcement can no longer be edited (15-minute window has passed).");
+
+    await db.collection("mentorshipBatchAnnouncements").updateOne(
+      { _id: new ObjectId(data.announcementId) },
+      { $set: { title: data.title.trim(), message: data.message.trim(), editedAt: new Date() } },
+    );
+    return { ok: true };
+  });
+
+export const deleteMentorAnnouncement = createServerFn({ method: "POST" })
+  .validator((data: { token: string; announcementId: string }) => data)
+  .handler(async ({ data }) => {
+    const mentorId = await requireMentor(data.token);
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+    const row = await db.collection("mentorshipBatchAnnouncements").findOne({ _id: new ObjectId(data.announcementId) });
+    if (!row || row.mentorId !== mentorId) throw new Error("Announcement not found.");
+    await db.collection("mentorshipBatchAnnouncements").deleteOne({ _id: new ObjectId(data.announcementId) });
+    return { ok: true };
+  });
+
+  // Per-student 1:1 usage across the whole batch, for the visual usage bar —
+// batches the per-student getStudentSessionUsage calls into one round trip.
+export const listAllStudentSessionUsage = createServerFn({ method: "POST" })
+  .validator((data: { token: string; batchId: string }) => data)
+  .handler(async ({ data }) => {
+    const mentorId = await requireMentor(data.token);
+    await requireOwnsBatch(mentorId, data.batchId);
+
+    const db = await getDb();
+    const rows = await db
+      .collection("mentorshipSessions")
+      .aggregate([
+        { $match: { mentorId, batchId: data.batchId, track: "OneOnOne", status: { $ne: "cancelled" } } },
+        { $group: { _id: "$studentUid", count: { $sum: 1 } } },
+      ])
+      .toArray();
+
+    return {
+      usage: rows.map((r) => ({
+        studentUid: r._id as string,
+        sessionsUsed: r.count as number,
+        sessionsRemaining: Math.max(0, 20 - (r.count as number)),
+      })),
+    };
+  });
+
+export const bulkCancelSessions = createServerFn({ method: "POST" })
+  .validator((data: { token: string; sessionIds: string[]; reason: string }) => data)
+  .handler(async ({ data }) => {
+    const mentorId = await requireMentor(data.token);
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+
+    const result = await db.collection("mentorshipSessions").updateMany(
+      { _id: { $in: data.sessionIds.map((id) => new ObjectId(id)) }, mentorId, status: "scheduled" },
+      { $set: { status: "cancelled", cancelReason: data.reason.trim() || null } },
+    );
+    return { ok: true, cancelledCount: result.modifiedCount };
+  });
+
+export const postMentorLectureComment = createServerFn({ method: "POST" })
+  .validator((data: { token: string; sessionId: string; body: string }) => data)
+  .handler(async ({ data }) => {
+    const mentorId = await requireMentor(data.token);
+    if (!data.body.trim()) throw new Error("Comment cannot be empty.");
+
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+
+    const session = await db.collection("mentorshipSessions").findOne({ _id: new ObjectId(data.sessionId) });
+    if (!session) throw new Error("Lecture not found.");
+    if (session.mentorId !== mentorId) throw new Error("You do not own this lecture session.");
+
+    const mentor = await db.collection("mentors").findOne({ _id: new ObjectId(mentorId) });
+
+    await db.collection("lectureComments").insertOne({
+      sessionId: data.sessionId,
+      studentUid: null,
+      studentName: null,
+      isMentor: true,
+      mentorId,
+      mentorName: mentor?.name as string,
+      mentorProfilePictureUrl: (mentor?.profilePictureUrl as string | null) ?? null,
+      body: data.body.trim(),
+      hidden: false,
+      createdAt: new Date(),
+    });
+
+    return { ok: true };
   });

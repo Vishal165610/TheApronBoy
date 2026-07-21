@@ -334,28 +334,28 @@ export const listLectureCommentsForStudent = createServerFn({ method: "GET" })
     const rows = await db
       .collection("lectureComments")
       .find({ sessionId: data.sessionId })
-      .sort({ createdAt: 1 })
+      .sort({ isMentor: -1, createdAt: 1 })
       .toArray();
 
-    // Hidden comments are invisible to every student except the one who
-    // posted it — a student should still see their own comment (so it
-    // doesn't look like it silently vanished), but not other students'
-    // hidden ones.
-    const visible = rows.filter((r) => !r.hidden || r.studentUid === decoded.uid);
+    const visible = rows.filter((r) => !r.hidden || r.studentUid === decoded.uid || r.isMentor);
 
     return {
       comments: visible.map((r) => ({
         id: String(r._id),
-        studentUid: r.studentUid as string,
-        studentName: r.studentName as string,
+        isMentor: Boolean(r.isMentor),
+        mentorId: (r.mentorId as string | null) ?? null,
+        studentUid: (r.studentUid as string | null) ?? null,
+        // For a mentor comment, "studentName" slot carries the mentor's
+        // name/photo instead — keeps one Comment shape for both authors.
+        studentName: r.isMentor ? (r.mentorName as string) : (r.studentName as string),
+        profilePictureUrl: r.isMentor ? ((r.mentorProfilePictureUrl as string | null) ?? null) : null,
         body: r.body as string,
-        isOwn: r.studentUid === decoded.uid,
+        isOwn: !r.isMentor && r.studentUid === decoded.uid,
         hidden: Boolean(r.hidden),
         createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : null,
       })),
     };
   });
-
 export const postLectureCommentAsStudent = createServerFn({ method: "POST" })
   .validator((data: { token: string; sessionId: string; body: string }) => data)
   .handler(async ({ data }) => {
@@ -533,5 +533,148 @@ export const listMentorNotesForStudent = createServerFn({ method: "GET" })
         fileUrl: r.fileUrl as string,
         watermarkApplied: Boolean(r.watermarkApplied),
       })),
+    };
+  });
+
+
+export const getPublicMentorFullProfile = createServerFn({ method: "GET" })
+  .validator((data: { token: string; mentorId: string }) => data)
+  .handler(async ({ data }) => {
+    await requireSignedIn(data.token);
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+
+    const m = await db.collection("mentors").findOne({ _id: new ObjectId(data.mentorId) });
+    if (!m) return { mentor: null, batches: [] };
+
+    const batches = await db.collection("mentorshipBatches").find({ assignedMentorId: data.mentorId }).toArray();
+
+    // Aggregate rating across every session this mentor has run, so the
+    // profile page can show one overall score rather than nothing.
+    const sessions = await db.collection("mentorshipSessions").find({ mentorId: data.mentorId }).toArray();
+    const sessionIds = sessions.map((s) => String(s._id));
+    const reviews =
+      sessionIds.length > 0
+        ? await db.collection("sessionReviews").find({ sessionId: { $in: sessionIds } }).toArray()
+        : [];
+    const avgRating = reviews.length > 0 ? reviews.reduce((sum, r) => sum + (r.rating as number), 0) / reviews.length : null;
+
+    return {
+      mentor: {
+        id: String(m._id),
+        name: m.name as string,
+        profilePictureUrl: (m.profilePictureUrl as string | null) ?? null,
+        aboutText: (m.aboutText as string) ?? "",
+        yearOfStudy: (m.yearOfStudy as string) ?? "",
+        introVideoUrl: (m.introVideoUrl as string | null) ?? null,
+        aiimsIitRank: (m.aiimsIitRank as string) ?? "",
+        enrolledCollege: (m.enrolledCollege as string) ?? "",
+        pursuedCourse: (m.pursuedCourse as string) ?? "",
+        avgRating: avgRating !== null ? Math.round(avgRating * 10) / 10 : null,
+        reviewCount: reviews.length,
+      },
+      batches: batches.map((b) => ({
+        id: String(b._id),
+        name: b.name as string,
+        track: b.track as string,
+        thumbnailUrl: (b.thumbnailUrl as string | null) ?? null,
+      })),
+    };
+  });
+
+
+function isCurrentlyLockedForStudent(lockedFrom: string, lockedUntil: string): boolean {
+  if (!lockedFrom || !lockedUntil) return false;
+  const now = new Date();
+  const [fromH, fromM] = lockedFrom.split(":").map(Number);
+  const [untilH, untilM] = lockedUntil.split(":").map(Number);
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const fromMinutes = fromH * 60 + fromM;
+  const untilMinutes = untilH * 60 + untilM;
+  if (fromMinutes <= untilMinutes) {
+    return !(nowMinutes >= fromMinutes && nowMinutes < untilMinutes);
+  }
+  return !(nowMinutes >= fromMinutes || nowMinutes < untilMinutes);
+}
+
+export const getMyMentorForBatch = createServerFn({ method: "GET" })
+  .validator((data: { token: string; batchId: string }) => data)
+  .handler(async ({ data }) => {
+    await requireSignedIn(data.token);
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+
+    const batch = await db.collection("mentorshipBatches").findOne({ _id: new ObjectId(data.batchId) });
+    if (!batch?.assignedMentorId) return { mentorId: null, mentorName: null };
+
+    const mentor = await db.collection("mentors").findOne({ _id: new ObjectId(batch.assignedMentorId as string) });
+    return {
+      mentorId: (batch.assignedMentorId as string) ?? null,
+      mentorName: (mentor?.name as string) ?? null,
+    };
+  });
+
+export const listMyChatWithMentor = createServerFn({ method: "GET" })
+  .validator((data: { token: string; batchId: string; mentorId: string }) => data)
+  .handler(async ({ data }) => {
+    const decoded = await requireSignedIn(data.token);
+    const db = await getDb();
+
+    const rows = await db
+      .collection("chatMessages")
+      .find({ mentorId: data.mentorId, batchId: data.batchId, studentUid: decoded.uid })
+      .sort({ createdAt: 1 })
+      .toArray();
+
+    return {
+      messages: rows.map((r) => ({
+        id: String(r._id),
+        sender: r.sender as "mentor" | "student",
+        body: r.body as string,
+        createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : null,
+      })),
+    };
+  });
+
+export const sendMyChatMessage = createServerFn({ method: "POST" })
+  .validator((data: { token: string; batchId: string; mentorId: string; body: string }) => data)
+  .handler(async ({ data }) => {
+    const decoded = await requireSignedIn(data.token);
+    if (!data.body.trim()) throw new Error("Message cannot be empty.");
+
+    const db = await getDb();
+
+    const purchase = await db
+      .collection("purchases")
+      .findOne({ uid: decoded.uid, itemType: "mentorship", itemId: data.batchId });
+    if (!purchase) throw new Error("You have not purchased this mentorship batch.");
+
+    const lock = await db.collection("chatLockWindows").findOne({ mentorId: data.mentorId, batchId: data.batchId });
+    if (lock && isCurrentlyLockedForStudent(lock.lockedFrom as string, lock.lockedUntil as string)) {
+      throw new Error("Messaging is currently locked by your mentor. Try again during their open window.");
+    }
+
+    await db.collection("chatMessages").insertOne({
+      mentorId: data.mentorId,
+      batchId: data.batchId,
+      studentUid: decoded.uid,
+      sender: "student",
+      body: data.body.trim(),
+      createdAt: new Date(),
+    });
+    return { ok: true };
+  });
+
+export const getChatLockStatusForStudent = createServerFn({ method: "GET" })
+  .validator((data: { token: string; batchId: string; mentorId: string }) => data)
+  .handler(async ({ data }) => {
+    await requireSignedIn(data.token);
+    const db = await getDb();
+    const lock = await db.collection("chatLockWindows").findOne({ mentorId: data.mentorId, batchId: data.batchId });
+    if (!lock) return { isLockedNow: false, openFrom: null as string | null, openUntil: null as string | null };
+    return {
+      isLockedNow: isCurrentlyLockedForStudent(lock.lockedFrom as string, lock.lockedUntil as string),
+      openFrom: lock.lockedFrom as string,
+      openUntil: lock.lockedUntil as string,
     };
   });

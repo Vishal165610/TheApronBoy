@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   Loader2,
@@ -9,6 +9,7 @@ import {
   FileText,
   Star as StarIcon,
   CheckCircle2,
+  BadgeCheck,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { AppHeader } from "@/components/app-header";
@@ -41,8 +42,11 @@ type LectureSession = {
 
 type Comment = {
   id: string;
-  studentUid: string;
+  isMentor: boolean;
+  mentorId: string | null;
+  studentUid: string | null;
   studentName: string;
+  profilePictureUrl: string | null;
   body: string;
   isOwn: boolean;
   hidden: boolean;
@@ -69,7 +73,7 @@ function LecturePage() {
 
   async function refreshComments(token: string) {
     const { comments: rows } = await listLectureCommentsForStudent({ data: { token, sessionId } });
-    setComments(rows);
+    setComments(rows as Comment[]);
   }
 
   useEffect(() => {
@@ -100,7 +104,9 @@ function LecturePage() {
   async function handleProgress(currentTime: number, duration: number) {
     if (!user) return;
     const token = await user.getIdToken();
-    const result = await updateLectureProgress({ data: { token, sessionId, watchedSeconds: currentTime, durationSeconds: duration } });
+    const result = await updateLectureProgress({
+      data: { token, sessionId, watchedSeconds: currentTime, durationSeconds: duration },
+    });
     if (result.completed) setCompleted(true);
   }
 
@@ -281,6 +287,10 @@ function RatingPanel({ sessionId, batchId }: { sessionId: string; batchId: strin
 }
 
 // ─── Discussion panel — height-locked with its own internal scroll ─────────
+// Mentor comments (isMentor: true) are always sorted to the top server-side
+// (see listLectureCommentsForStudent) and rendered with a distinct pinned
+// style: verified badge, tinted background, and the mentor's name links to
+// their full public profile page.
 function DiscussionPanel({
   sessionId,
   comments,
@@ -330,7 +340,7 @@ function DiscussionPanel({
       {/* This is the ONLY scrollable region — the outer container's height
           is fixed (h-[32rem]), so the page itself never grows past the
           player + panels above. */}
-      <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
+      <div className="flex-1 space-y-2.5 overflow-y-auto px-5 py-4">
         {comments === null ? (
           <div className="flex justify-center py-6">
             <Loader2 className="h-5 w-5 animate-spin text-foreground/40" />
@@ -338,27 +348,65 @@ function DiscussionPanel({
         ) : comments.length === 0 ? (
           <p className="text-sm text-foreground/50">No comments yet — ask a question or share a thought.</p>
         ) : (
-          comments.map((c) => (
-            <div key={c.id} className={`clay-inset flex gap-2.5 px-3.5 py-2.5 ${c.hidden ? "opacity-50" : ""}`}>
-              <div className="clay flex h-7 w-7 shrink-0 items-center justify-center rounded-full">
-                <User2 className="h-3 w-3 text-foreground/40" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <p className="text-xs font-semibold text-foreground">{c.isOwn ? "You" : c.studentName}</p>
-                  <p className="text-[10px] text-foreground/40">
-                    {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : ""}
-                  </p>
-                  {c.hidden && (
-                    <span className="rounded-full bg-foreground/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-foreground/50">
-                      Hidden
-                    </span>
+          comments.map((c) =>
+            c.isMentor ? (
+              <div
+                key={c.id}
+                className="clay flex gap-2.5 border-2 border-[var(--sky-deep)]/30 bg-[var(--sky-soft)]/30 px-3.5 py-2.5"
+              >
+                <div className="clay flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full">
+                  {c.profilePictureUrl ? (
+                    <img src={c.profilePictureUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <User2 className="h-3 w-3 text-foreground/40" />
                   )}
                 </div>
-                <p className="mt-0.5 break-words text-xs leading-relaxed text-foreground/80">{c.body}</p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1">
+                    {c.mentorId ? (
+                      <Link
+                        to="/mentor-profile/$mentorId"
+                        params={{ mentorId: c.mentorId }}
+                        className="text-xs font-bold text-foreground hover:underline"
+                      >
+                        {c.studentName}
+                      </Link>
+                    ) : (
+                      <p className="text-xs font-bold text-foreground">{c.studentName}</p>
+                    )}
+                    <BadgeCheck className="h-3.5 w-3.5 shrink-0 fill-[var(--sky-deep)] text-white" />
+                    <span className="rounded-full bg-[var(--sky-deep)]/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[var(--sky-deep)]">
+                      Mentor
+                    </span>
+                    <p className="text-[10px] text-foreground/40">
+                      {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : ""}
+                    </p>
+                  </div>
+                  <p className="mt-0.5 break-words text-xs leading-relaxed text-foreground/80">{c.body}</p>
+                </div>
               </div>
-            </div>
-          ))
+            ) : (
+              <div key={c.id} className={`clay-inset flex gap-2.5 px-3.5 py-2.5 ${c.hidden ? "opacity-50" : ""}`}>
+                <div className="clay flex h-7 w-7 shrink-0 items-center justify-center rounded-full">
+                  <User2 className="h-3 w-3 text-foreground/40" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <p className="text-xs font-semibold text-foreground">{c.isOwn ? "You" : c.studentName}</p>
+                    <p className="text-[10px] text-foreground/40">
+                      {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : ""}
+                    </p>
+                    {c.hidden && (
+                      <span className="rounded-full bg-foreground/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-foreground/50">
+                        Hidden
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 break-words text-xs leading-relaxed text-foreground/80">{c.body}</p>
+                </div>
+              </div>
+            ),
+          )
         )}
         <div ref={bottomRef} />
       </div>

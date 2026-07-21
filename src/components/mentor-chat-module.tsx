@@ -9,6 +9,8 @@ import {
   ShieldCheck,
   FileText,
   Clock,
+  Plus,
+  X,
 } from "lucide-react";
 import {
   listMyAssignedBatches,
@@ -19,6 +21,7 @@ import {
   setChatLockWindow,
   uploadMentorNote,
   listMentorNotes,
+  listBatchStudents,
 } from "@/server-functions/mentor-portal";
 
 const inputClass =
@@ -53,6 +56,7 @@ type Thread = {
   lastSender: "mentor" | "student";
 };
 type ChatMessage = { id: string; sender: "mentor" | "student"; body: string; createdAt: string | null };
+type Student = { uid: string; fullName: string; email: string | null };
 
 export function MentorChatModule({ mentorToken }: { mentorToken: string }) {
   const [batches, setBatches] = useState<Batch[] | null>(null);
@@ -215,12 +219,12 @@ function ChatCanvas({ mentorToken, batchId }: { mentorToken: string; batchId: st
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showNewMessage, setShowNewMessage] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   async function refreshThreads() {
     const { threads: rows } = await listChatThreads({ data: { token: mentorToken, batchId } });
     setThreads(rows);
-    if (!activeStudentUid && rows.length > 0) setActiveStudentUid(rows[0].studentUid);
   }
 
   async function refreshMessages(studentUid: string) {
@@ -229,12 +233,15 @@ function ChatCanvas({ mentorToken, batchId }: { mentorToken: string; batchId: st
   }
 
   useEffect(() => {
+    setActiveStudentUid(null);
+    setMessages(null);
     refreshThreads();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [batchId]);
 
   useEffect(() => {
     if (activeStudentUid) refreshMessages(activeStudentUid);
+    else setMessages(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeStudentUid]);
 
@@ -260,22 +267,45 @@ function ChatCanvas({ mentorToken, batchId }: { mentorToken: string; batchId: st
     }
   }
 
+  function handleThreadStarted(studentUid: string) {
+    setShowNewMessage(false);
+    refreshThreads();
+    setActiveStudentUid(studentUid);
+  }
+
   const activeThread = threads?.find((t) => t.studentUid === activeStudentUid);
 
   return (
     <div className="clay mb-6 grid grid-cols-1 overflow-hidden sm:grid-cols-[220px_1fr]">
       {/* ── Thread list (left pane) ─────────────────────────────────── */}
       <div className="border-b border-foreground/10 sm:border-b-0 sm:border-r">
-        <div className="flex items-center gap-2 px-4 py-3.5">
-          <MessageSquare className="h-4 w-4 text-foreground/60" />
-          <span className="text-xs font-semibold uppercase tracking-wide text-foreground/60">Threads</span>
+        <div className="flex items-center justify-between gap-2 px-4 py-3.5">
+          <div className="flex items-center gap-2">
+            <MessageSquare className="h-4 w-4 text-foreground/60" />
+            <span className="text-xs font-semibold uppercase tracking-wide text-foreground/60">Threads</span>
+          </div>
+          <button
+            onClick={() => setShowNewMessage(true)}
+            className="flex h-7 w-7 items-center justify-center rounded-full text-foreground/50 hover:bg-foreground/5 hover:text-foreground"
+            aria-label="Start a new conversation"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
         </div>
         {threads === null ? (
           <div className="flex justify-center py-6">
             <Loader2 className="h-4 w-4 animate-spin text-foreground/40" />
           </div>
         ) : threads.length === 0 ? (
-          <p className="px-4 pb-4 text-xs text-foreground/50">No conversations yet.</p>
+          <div className="px-4 pb-4">
+            <p className="mb-2 text-xs text-foreground/50">No conversations yet.</p>
+            <button
+              onClick={() => setShowNewMessage(true)}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--sky-deep)] hover:underline"
+            >
+              <Plus className="h-3 w-3" /> Start a conversation
+            </button>
+          </div>
         ) : (
           <ul className="max-h-80 overflow-y-auto pb-2 sm:max-h-[26rem]">
             {threads.map((t) => (
@@ -302,12 +332,17 @@ function ChatCanvas({ mentorToken, batchId }: { mentorToken: string; batchId: st
       <div className="flex min-h-[24rem] flex-col">
         <div className="border-b border-foreground/10 px-4 py-3.5">
           <p className="text-sm font-semibold text-foreground">
-            {activeThread?.studentName ?? (threads && threads.length === 0 ? "No conversations yet" : "Select a thread")}
+            {activeThread?.studentName ?? "Select a thread, or start a new one"}
           </p>
         </div>
 
         <div className="flex-1 space-y-2 overflow-y-auto p-4">
-          {messages === null ? (
+          {!activeStudentUid ? (
+            <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-foreground/40">
+              <MessageSquare className="h-8 w-8" strokeWidth={1.5} />
+              <p className="text-xs">Pick a conversation on the left, or tap + to message a student.</p>
+            </div>
+          ) : messages === null ? (
             <div className="flex justify-center py-6">
               <Loader2 className="h-4 w-4 animate-spin text-foreground/40" />
             </div>
@@ -318,9 +353,7 @@ function ChatCanvas({ mentorToken, batchId }: { mentorToken: string; batchId: st
               <div key={m.id} className={`flex ${m.sender === "mentor" ? "justify-end" : "justify-start"}`}>
                 <div
                   className={`max-w-[75%] rounded-2xl px-3.5 py-2 text-sm ${
-                    m.sender === "mentor"
-                      ? "clay-btn text-white"
-                      : "clay-inset text-foreground"
+                    m.sender === "mentor" ? "clay-btn text-white" : "clay-inset text-foreground"
                   }`}
                 >
                   {m.body}
@@ -354,6 +387,121 @@ function ChatCanvas({ mentorToken, batchId }: { mentorToken: string; batchId: st
                 {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </button>
             </div>
+          </form>
+        )}
+      </div>
+
+      {showNewMessage && (
+        <NewMessageModal
+          mentorToken={mentorToken}
+          batchId={batchId}
+          existingThreadUids={(threads ?? []).map((t) => t.studentUid)}
+          onClose={() => setShowNewMessage(false)}
+          onSent={handleThreadStarted}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── New message modal — the missing "first message" entry point ──────────
+function NewMessageModal({
+  mentorToken,
+  batchId,
+  existingThreadUids,
+  onClose,
+  onSent,
+}: {
+  mentorToken: string;
+  batchId: string;
+  existingThreadUids: string[];
+  onClose: () => void;
+  onSent: (studentUid: string) => void;
+}) {
+  const [students, setStudents] = useState<Student[] | null>(null);
+  const [studentUid, setStudentUid] = useState("");
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const { students: rows } = await listBatchStudents({ data: { token: mentorToken, batchId } });
+      setStudents(rows);
+      if (rows.length > 0) setStudentUid(rows[0].uid);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batchId]);
+
+  async function handleSend(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!studentUid) return setError("Select a student.");
+    if (!message.trim()) return setError("Write a message first.");
+
+    setSending(true);
+    try {
+      await sendChatMessage({ data: { token: mentorToken, batchId, studentUid, body: message } });
+      onSent(studentUid);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not send. Try again.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 px-4" onClick={onClose}>
+      <div className="clay w-full max-w-md p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-sm font-semibold uppercase tracking-[0.15em] text-foreground/60">New message</h3>
+          <button onClick={onClose} className="text-foreground/40 hover:text-foreground/70">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {students === null ? (
+          <div className="flex justify-center py-6">
+            <Loader2 className="h-5 w-5 animate-spin text-foreground/40" />
+          </div>
+        ) : students.length === 0 ? (
+          <p className="text-sm text-foreground/60">No students have purchased this batch yet.</p>
+        ) : (
+          <form onSubmit={handleSend} className="space-y-4">
+            <ClayField label="Student">
+              <select value={studentUid} onChange={(e) => setStudentUid(e.target.value)} className={inputClass + " appearance-none"}>
+                {students.map((s) => (
+                  <option key={s.uid} value={s.uid}>
+                    {s.fullName}
+                    {existingThreadUids.includes(s.uid) ? " (existing thread)" : ""}
+                  </option>
+                ))}
+              </select>
+            </ClayField>
+
+            <ClayField label="Message">
+              <textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                rows={4}
+                placeholder="Type your first message…"
+                className="clay-inset w-full resize-none rounded-2xl px-4 py-2.5 text-sm text-foreground placeholder:text-foreground/40 focus:outline-none"
+              />
+            </ClayField>
+
+            {error && (
+              <p className="rounded-2xl bg-[var(--coral-soft)]/50 px-4 py-2 text-xs font-medium text-foreground">
+                {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={sending}
+              className="clay-btn flex w-full items-center justify-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold disabled:opacity-70"
+            >
+              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send message"}
+            </button>
           </form>
         )}
       </div>
@@ -481,10 +629,10 @@ function NoteUploadGate({ mentorToken, batchId }: { mentorToken: string; batchId
           <ul className="space-y-2">
             {notes.map((n) => (
               <li key={n.id} className="clay-inset flex items-center justify-between gap-3 px-4 py-2.5">
-                <div className="flex items-center gap-2">
+                <a href={n.fileUrl} target="_blank" rel="noreferrer" className="flex min-w-0 flex-1 items-center gap-2">
                   <FileText className="h-4 w-4 shrink-0 text-foreground/40" />
                   <span className="truncate text-sm text-foreground">{n.fileName}</span>
-                </div>
+                </a>
                 <span
                   className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
                     n.watermarkApplied ? "bg-[var(--mint-soft)]/60 text-foreground" : "bg-foreground/5 text-foreground/50"

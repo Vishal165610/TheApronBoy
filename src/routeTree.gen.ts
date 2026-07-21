@@ -22,6 +22,7 @@ import { Route as TestTestIdRouteImport } from './routes/test.$testId'
 import { Route as TestResultAttemptIdRouteImport } from './routes/test-result.$attemptId'
 import { Route as TestAnalysisTestIdRouteImport } from './routes/test-analysis.$testId'
 import { Route as MentorDashboardRouteImport } from './routes/mentor.dashboard'
+import { Route as MentorProfileMentorIdRouteImport } from './routes/mentor-profile.$mentorId'
 import { Route as LegalTermsRouteImport } from './routes/legal/terms'
 import { Route as LegalRefundRouteImport } from './routes/legal/refund'
 import { Route as LegalPrivacyRouteImport } from './routes/legal/privacy'
@@ -95,6 +96,11 @@ const MentorDashboardRoute = MentorDashboardRouteImport.update({
   path: '/mentor/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MentorProfileMentorIdRoute = MentorProfileMentorIdRouteImport.update({
+  id: '/mentor-profile/$mentorId',
+  path: '/mentor-profile/$mentorId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LegalTermsRoute = LegalTermsRouteImport.update({
   id: '/legal/terms',
   path: '/legal/terms',
@@ -147,6 +153,7 @@ export interface FileRoutesByFullPath {
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/refund': typeof LegalRefundRoute
   '/legal/terms': typeof LegalTermsRoute
+  '/mentor-profile/$mentorId': typeof MentorProfileMentorIdRoute
   '/mentor/dashboard': typeof MentorDashboardRoute
   '/test-analysis/$testId': typeof TestAnalysisTestIdRoute
   '/test-result/$attemptId': typeof TestResultAttemptIdRoute
@@ -169,6 +176,7 @@ export interface FileRoutesByTo {
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/refund': typeof LegalRefundRoute
   '/legal/terms': typeof LegalTermsRoute
+  '/mentor-profile/$mentorId': typeof MentorProfileMentorIdRoute
   '/mentor/dashboard': typeof MentorDashboardRoute
   '/test-analysis/$testId': typeof TestAnalysisTestIdRoute
   '/test-result/$attemptId': typeof TestResultAttemptIdRoute
@@ -192,6 +200,7 @@ export interface FileRoutesById {
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/refund': typeof LegalRefundRoute
   '/legal/terms': typeof LegalTermsRoute
+  '/mentor-profile/$mentorId': typeof MentorProfileMentorIdRoute
   '/mentor/dashboard': typeof MentorDashboardRoute
   '/test-analysis/$testId': typeof TestAnalysisTestIdRoute
   '/test-result/$attemptId': typeof TestResultAttemptIdRoute
@@ -216,6 +225,7 @@ export interface FileRouteTypes {
     | '/legal/privacy'
     | '/legal/refund'
     | '/legal/terms'
+    | '/mentor-profile/$mentorId'
     | '/mentor/dashboard'
     | '/test-analysis/$testId'
     | '/test-result/$attemptId'
@@ -238,6 +248,7 @@ export interface FileRouteTypes {
     | '/legal/privacy'
     | '/legal/refund'
     | '/legal/terms'
+    | '/mentor-profile/$mentorId'
     | '/mentor/dashboard'
     | '/test-analysis/$testId'
     | '/test-result/$attemptId'
@@ -260,6 +271,7 @@ export interface FileRouteTypes {
     | '/legal/privacy'
     | '/legal/refund'
     | '/legal/terms'
+    | '/mentor-profile/$mentorId'
     | '/mentor/dashboard'
     | '/test-analysis/$testId'
     | '/test-result/$attemptId'
@@ -283,6 +295,7 @@ export interface RootRouteChildren {
   LegalPrivacyRoute: typeof LegalPrivacyRoute
   LegalRefundRoute: typeof LegalRefundRoute
   LegalTermsRoute: typeof LegalTermsRoute
+  MentorProfileMentorIdRoute: typeof MentorProfileMentorIdRoute
   MentorDashboardRoute: typeof MentorDashboardRoute
   TestAnalysisTestIdRoute: typeof TestAnalysisTestIdRoute
   TestResultAttemptIdRoute: typeof TestResultAttemptIdRoute
@@ -383,6 +396,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MentorDashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mentor-profile/$mentorId': {
+      id: '/mentor-profile/$mentorId'
+      path: '/mentor-profile/$mentorId'
+      fullPath: '/mentor-profile/$mentorId'
+      preLoaderRoute: typeof MentorProfileMentorIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/legal/terms': {
       id: '/legal/terms'
       path: '/legal/terms'
@@ -451,6 +471,7 @@ const rootRouteChildren: RootRouteChildren = {
   LegalPrivacyRoute: LegalPrivacyRoute,
   LegalRefundRoute: LegalRefundRoute,
   LegalTermsRoute: LegalTermsRoute,
+  MentorProfileMentorIdRoute: MentorProfileMentorIdRoute,
   MentorDashboardRoute: MentorDashboardRoute,
   TestAnalysisTestIdRoute: TestAnalysisTestIdRoute,
   TestResultAttemptIdRoute: TestResultAttemptIdRoute,

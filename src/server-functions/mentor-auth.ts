@@ -194,7 +194,13 @@ export const updateMyMentorProfile = createServerFn({ method: "POST" })
     const { name, profilePictureUrl, aboutText, yearOfStudy, introVideoUrl } = data.profile;
 
     if (!name.trim()) throw new Error("Name cannot be empty.");
-    if (!aboutText.trim()) throw new Error("About text cannot be empty.");
+    if (!aboutText.trim()) throw new Error("About text cannot be empty.");if (aboutText.trim().length < 50) {
+      throw new Error("About section should be at least 50 characters — give students a real sense of your journey.");
+    }
+    if (introVideoUrl && !/^https?:\/\//.test(introVideoUrl)) {
+      throw new Error("Intro video URL must start with http:// or https://");
+    }
+
 
     await db.collection("mentors").updateOne(
       { _id: new ObjectId(mentorId) },
@@ -212,15 +218,7 @@ export const updateMyMentorProfile = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// ─── Super Admin — Locked Field Injection ───────────────────────────────────
 
-// The ONLY place aiimsIitRank / enrolledCollege / pursuedCourse can ever be
-// written. Gated by requireSuperAdmin (Firebase ID token + `admin: true`
-// claim), the exact same check used throughout admin.ts — a mentor's own
-// session token is never accepted here, and mentor-side code never calls
-// this function. Intended to be wired into a "locked fields" sub-panel in
-// mentor-hub-module.tsx (the admin-side mentor editor), alongside the
-// existing updateMentorProfile (name/profilePictureUrl/trackingIndex).
 export const updateMentorLockedInfo = createServerFn({ method: "POST" })
   .validator((data: { token: string; mentorId: string; lockedInfo: MentorLockedInfoInput }) => data)
   .handler(async ({ data }) => {
@@ -237,6 +235,7 @@ export const updateMentorLockedInfo = createServerFn({ method: "POST" })
           aiimsIitRank: aiimsIitRank.trim(),
           enrolledCollege: enrolledCollege.trim(),
           pursuedCourse: pursuedCourse.trim(),
+          lockedInfoUpdatedAt: new Date(),
         },
       },
     );
@@ -246,4 +245,28 @@ export const updateMentorLockedInfo = createServerFn({ method: "POST" })
     }
 
     return { ok: true };
+  });
+
+export const getMentorProfileCompleteness = createServerFn({ method: "POST" })
+  .validator((data: { token: string }) => data)
+  .handler(async ({ data }) => {
+    const mentorId = await requireMentor(data.token);
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+    const m = await db.collection("mentors").findOne({ _id: new ObjectId(mentorId) });
+    if (!m) throw new Error("Mentor account not found.");
+
+    const checks = [
+      { key: "profilePictureUrl", label: "Profile picture", done: Boolean(m.profilePictureUrl) },
+      { key: "aboutText", label: "About section", done: ((m.aboutText as string) ?? "").length >= 50 },
+      { key: "yearOfStudy", label: "Year of study", done: Boolean(m.yearOfStudy) },
+      { key: "introVideoUrl", label: "Intro video", done: Boolean(m.introVideoUrl) },
+    ];
+    const completedCount = checks.filter((c) => c.done).length;
+
+    return {
+      percent: Math.round((completedCount / checks.length) * 100),
+      missing: checks.filter((c) => !c.done).map((c) => c.label),
+      lockedUpdatedAt: m.lockedInfoUpdatedAt instanceof Date ? m.lockedInfoUpdatedAt.toISOString() : null,
+    };
   });

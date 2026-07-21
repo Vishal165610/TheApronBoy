@@ -1,8 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { MoreVertical, CheckCircle2 } from "lucide-react";
-import { ClayStarRating } from "@/components/clay-star-rating";
-import { submitSessionReview, getMySessionReview, listMySessionStatuses } from "@/server-functions/batch-hub";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   Loader2,
   LayoutDashboard,
@@ -11,6 +8,7 @@ import {
   Megaphone,
   LifeBuoy,
   Lock,
+  Unlock,
   PlayCircle,
   FileText,
   ChevronDown,
@@ -26,10 +24,14 @@ import {
   CalendarClock,
   Link2,
   Radio,
+  MoreVertical,
+  CheckCircle2,
+  MessageSquare,
+  Send,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { AppHeader } from "@/components/app-header";
-import { VideoPlayer } from "@/components/clay-video-player";
+import { ClayStarRating } from "@/components/clay-star-rating";
 import {
   getPublicBundleDetail,
   getPublicMentorshipDetail,
@@ -38,6 +40,14 @@ import {
   listPublicMentorshipAnnouncements,
   getPublicMentorProfile,
   listMentorshipSessionsForStudent,
+  listMySessionStatuses,
+  submitSessionReview,
+  getMySessionReview,
+  listMentorNotesForStudent,
+  getMyMentorForBatch,
+  listMyChatWithMentor,
+  sendMyChatMessage,
+  getChatLockStatusForStudent,
   hasPurchased,
   requestCallback,
   submitSupportTicket,
@@ -45,8 +55,6 @@ import {
 import { createRazorpayOrder, verifyRazorpayPayment } from "@/server-functions/payments";
 import { listMyAttemptsForTest } from "@/server-functions/test-results";
 
-// Razorpay's checkout.js attaches window.Razorpay — declared here since it's
-// loaded dynamically rather than imported as a module.
 declare global {
   interface Window {
     Razorpay: new (options: Record<string, unknown>) => { open: () => void };
@@ -77,11 +85,7 @@ export const Route = createFileRoute("/course/$kind/$id")({
 });
 
 type Kind = "bundle" | "mentorship";
-
-// Bundles show Tests; mentorship batches show live Sessions instead — the
-// tab key stays "tests" internally so state/URL patterns don't change, but
-// its label and content swap per kind.
-type TabKey = "overview" | "tests" | "assets" | "announcements" | "help";
+type TabKey = "overview" | "tests" | "assets" | "announcements" | "chat" | "help";
 
 type BundleDetail = {
   id: string;
@@ -150,14 +154,24 @@ type AnnouncementRow = {
   createdAt: string | null;
 };
 
+type NoteRow = { id: string; fileName: string; fileUrl: string; watermarkApplied: boolean };
+
 function tabsForKind(kind: Kind): { key: TabKey; label: string; icon: typeof LayoutDashboard }[] {
-  return [
+  const base: { key: TabKey; label: string; icon: typeof LayoutDashboard }[] = [
     { key: "overview", label: "Overview", icon: LayoutDashboard },
-    { key: "tests", label: kind === "bundle" ? "Tests" : "Sessions", icon: kind === "bundle" ? ClipboardList : CalendarClock },
+    {
+      key: "tests",
+      label: kind === "bundle" ? "Tests" : "Sessions",
+      icon: kind === "bundle" ? ClipboardList : CalendarClock,
+    },
     { key: "assets", label: "Assets", icon: FolderOpen },
     { key: "announcements", label: "Announcements", icon: Megaphone },
-    { key: "help", label: "Help", icon: LifeBuoy },
   ];
+  if (kind === "mentorship") {
+    base.push({ key: "chat", label: "Chat", icon: MessageSquare });
+  }
+  base.push({ key: "help", label: "Help", icon: LifeBuoy });
+  return base;
 }
 
 function CourseHubPage() {
@@ -269,7 +283,6 @@ function CourseHubPage() {
                 razorpaySignature: response.razorpay_signature,
               },
             });
-            // Unlock immediately — no page reload needed.
             setIsPurchased(true);
           } catch {
             setPurchaseError("Payment succeeded but verification failed. Contact support with your payment ID.");
@@ -355,10 +368,20 @@ function CourseHubPage() {
             <SessionsTab sessions={sessions} isPurchased={isPurchased} batchId={id} user={user} />
           )}
           {activeTab === "assets" && (
-            <AssetsTab bundle={bundle} isPurchased={isPurchased} onOpenPdf={setPdfModalUrl} />
+            <AssetsTab
+              kind={kind}
+              bundle={bundle}
+              batchId={id}
+              isPurchased={isPurchased}
+              user={user}
+              onOpenPdf={setPdfModalUrl}
+            />
           )}
           {activeTab === "announcements" && (
             <AnnouncementsTab announcements={announcements} isPurchased={isPurchased} />
+          )}
+          {activeTab === "chat" && kind === "mentorship" && (
+            <ChatTab batchId={id} isPurchased={isPurchased} user={user} />
           )}
           {activeTab === "help" && <HelpTab isPurchased={isPurchased} user={user} kind={kind} itemId={id} />}
         </main>
@@ -435,7 +458,7 @@ function CourseHubPage() {
             </div>
             <iframe
               title="Document preview"
-              src={`https://docs.google.com/viewer?url=${encodeURIComponent(pdfModalUrl)}&embedded=true`}
+              src={pdfModalUrl.startsWith("data:") ? pdfModalUrl : `https://docs.google.com/viewer?url=${encodeURIComponent(pdfModalUrl)}&embedded=true`}
               className="clay-inset h-full w-full flex-1 rounded-2xl"
             />
           </div>
@@ -460,7 +483,6 @@ function LockGate({ locked, children }: { locked: boolean; children: ReactNode }
   );
 }
 
-// ─── Mentor bio card — surfaces the Mentor Portal's Profile data here ───────
 function MentorBioCard({ mentorProfile }: { mentorProfile: MentorProfile }) {
   const lockedItems = [
     { icon: Trophy, label: "AIIMS / IIT Rank", value: mentorProfile.aiimsIitRank },
@@ -483,9 +505,7 @@ function MentorBioCard({ mentorProfile }: { mentorProfile: MentorProfile }) {
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wide text-foreground/50">Your Mentor</p>
           <p className="font-display text-lg font-bold text-foreground">{mentorProfile.name}</p>
-          {mentorProfile.yearOfStudy && (
-            <p className="text-xs text-foreground/50">{mentorProfile.yearOfStudy}</p>
-          )}
+          {mentorProfile.yearOfStudy && <p className="text-xs text-foreground/50">{mentorProfile.yearOfStudy}</p>}
         </div>
       </div>
 
@@ -493,12 +513,6 @@ function MentorBioCard({ mentorProfile }: { mentorProfile: MentorProfile }) {
         <p className="mt-4 whitespace-pre-line text-sm leading-relaxed text-foreground/70">
           {mentorProfile.aboutText}
         </p>
-      )}
-
-      {mentorProfile.introVideoUrl && (
-        <div className="mt-4">
-          <VideoPlayer src={mentorProfile.introVideoUrl} />
-        </div>
       )}
 
       {lockedItems.length > 0 && (
@@ -684,7 +698,6 @@ function TestsTab({
   navigate: ReturnType<typeof useNavigate>;
   user: { getIdToken: () => Promise<string> };
 }) {
-  // Per-test attempt summary: undefined = still loading, [] = never attempted.
   const [attemptsByTest, setAttemptsByTest] = useState<Record<string, { count: number; bestScore: number; totalMarks: number } | undefined>>({});
 
   useEffect(() => {
@@ -961,7 +974,6 @@ function SessionsTab({
   );
 }
 
-// ─── Three-dot review menu — available on every session row, all tracks ────
 function SessionKebabMenu({
   sessionId,
   batchId,
@@ -1046,19 +1058,79 @@ function SessionKebabMenu({
   );
 }
 
+// ─── Assets tab — now handles BOTH bundle syllabus/planner docs AND
+// mentorship batch notes uploaded through the mentor's watermark gate ──────
 function AssetsTab({
+  kind,
   bundle,
+  batchId,
   isPurchased,
+  user,
   onOpenPdf,
 }: {
+  kind: Kind;
   bundle: BundleDetail | null;
+  batchId: string;
   isPurchased: boolean;
+  user: { getIdToken: () => Promise<string> };
   onOpenPdf: (url: string) => void;
 }) {
+  const [notes, setNotes] = useState<NoteRow[] | null>(null);
+
+  useEffect(() => {
+    if (kind !== "mentorship") return;
+    (async () => {
+      const token = await user.getIdToken();
+      const { notes: rows } = await listMentorNotesForStudent({ data: { token, batchId } });
+      setNotes(rows);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind, batchId]);
+
+  if (kind === "mentorship") {
+    if (notes === null) {
+      return (
+        <div className="flex justify-center py-10">
+          <Loader2 className="h-5 w-5 animate-spin text-foreground/40" />
+        </div>
+      );
+    }
+    if (notes.length === 0) {
+      return (
+        <div className="clay p-8 text-center text-sm text-foreground/60">
+          Your mentor hasn't uploaded any notes yet.
+        </div>
+      );
+    }
+    return (
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {notes.map((n) => (
+          <LockGate key={n.id} locked={!isPurchased}>
+            <button
+              disabled={!isPurchased}
+              onClick={() => onOpenPdf(n.fileUrl)}
+              className="clay flex w-full items-center gap-3 p-4 text-left disabled:cursor-not-allowed"
+            >
+              <div className="clay-inset flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
+                <FileText className="h-4 w-4 text-foreground/50" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-foreground">{n.fileName}</p>
+                <p className="text-xs text-foreground/40">
+                  {n.watermarkApplied ? "Watermarked note" : "Pending watermark"}
+                </p>
+              </div>
+            </button>
+          </LockGate>
+        ))}
+      </div>
+    );
+  }
+
   if (!bundle) {
     return (
-      <div className="clay p-8 text-center text-sm text-foreground/60">
-        Assets aren't available for mentorship batches.
+      <div className="flex justify-center py-10">
+        <Loader2 className="h-5 w-5 animate-spin text-foreground/40" />
       </div>
     );
   }
@@ -1129,6 +1201,175 @@ function AnnouncementsTab({
           </div>
         </LockGate>
       ))}
+    </div>
+  );
+}
+
+// ─── Chat tab — student ↔ mentor DM, mentorship batches only ───────────────
+type ChatMessage = { id: string; sender: "mentor" | "student"; body: string; createdAt: string | null };
+
+function ChatTab({
+  batchId,
+  isPurchased,
+  user,
+}: {
+  batchId: string;
+  isPurchased: boolean;
+  user: { getIdToken: () => Promise<string> };
+}) {
+  const [mentorId, setMentorId] = useState<string | null>(null);
+  const [mentorName, setMentorName] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[] | null>(null);
+  const [lockStatus, setLockStatus] = useState<{ isLockedNow: boolean; openFrom: string | null; openUntil: string | null } | null>(null);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isPurchased) return;
+    (async () => {
+      const token = await user.getIdToken();
+      const { mentorId: mid, mentorName: mname } = await getMyMentorForBatch({ data: { token, batchId } });
+      setMentorId(mid);
+      setMentorName(mname);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batchId, isPurchased]);
+
+  async function refreshAll(mid: string) {
+    const token = await user.getIdToken();
+    const [{ messages: rows }, lock] = await Promise.all([
+      listMyChatWithMentor({ data: { token, batchId, mentorId: mid } }),
+      getChatLockStatusForStudent({ data: { token, batchId, mentorId: mid } }),
+    ]);
+    setMessages(rows);
+    setLockStatus(lock);
+  }
+
+  useEffect(() => {
+    if (mentorId) refreshAll(mentorId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mentorId]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  async function handleSend(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!draft.trim() || !mentorId) return;
+
+    setSending(true);
+    try {
+      const token = await user.getIdToken();
+      await sendMyChatMessage({ data: { token, batchId, mentorId, body: draft } });
+      setDraft("");
+      await refreshAll(mentorId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not send. Try again.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (!isPurchased) {
+    return (
+      <LockGate locked>
+        <div className="clay flex h-96 flex-col overflow-hidden" />
+      </LockGate>
+    );
+  }
+
+  if (mentorId === null && mentorName === null) {
+    return (
+      <div className="flex justify-center py-10">
+        <Loader2 className="h-5 w-5 animate-spin text-foreground/40" />
+      </div>
+    );
+  }
+
+  if (!mentorId) {
+    return (
+      <div className="clay p-8 text-center text-sm text-foreground/60">
+        No mentor is currently assigned to this batch.
+      </div>
+    );
+  }
+
+  return (
+    <div className="clay flex h-[32rem] flex-col overflow-hidden">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-foreground/10 px-5 py-4">
+        <div className="flex items-center gap-2">
+          <MessageSquare className="h-4 w-4 text-foreground/60" />
+          <p className="text-sm font-semibold text-foreground">Chat with {mentorName}</p>
+        </div>
+        {lockStatus && (
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+              lockStatus.isLockedNow ? "bg-[var(--coral-soft)]/50 text-foreground" : "bg-[var(--mint-soft)]/60 text-foreground"
+            }`}
+          >
+            {lockStatus.isLockedNow ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
+            {lockStatus.isLockedNow
+              ? `Locked · opens ${lockStatus.openFrom}`
+              : lockStatus.openFrom
+                ? `Open until ${lockStatus.openUntil}`
+                : "Open"}
+          </span>
+        )}
+      </div>
+
+      <div className="flex-1 space-y-2 overflow-y-auto p-4">
+        {messages === null ? (
+          <div className="flex justify-center py-6">
+            <Loader2 className="h-4 w-4 animate-spin text-foreground/40" />
+          </div>
+        ) : messages.length === 0 ? (
+          <p className="text-xs text-foreground/50">No messages yet — say hello to your mentor.</p>
+        ) : (
+          messages.map((m) => (
+            <div key={m.id} className={`flex ${m.sender === "student" ? "justify-end" : "justify-start"}`}>
+              <div
+                className={`max-w-[75%] rounded-2xl px-3.5 py-2 text-sm ${
+                  m.sender === "student" ? "clay-btn text-white" : "clay-inset text-foreground"
+                }`}
+              >
+                {m.body}
+              </div>
+            </div>
+          ))
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      <div className="shrink-0 border-t border-foreground/10 p-3">
+        {lockStatus?.isLockedNow && (
+          <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-[var(--destructive)]">
+            <Lock className="h-3 w-3" />
+            Messaging is locked right now by your mentor.
+          </p>
+        )}
+        <form onSubmit={handleSend} className="flex items-center gap-2">
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Type a message…"
+            disabled={lockStatus?.isLockedNow}
+            className="clay-inset flex-1 rounded-2xl px-4 py-2.5 text-sm text-foreground placeholder:text-foreground/40 focus:outline-none disabled:opacity-50"
+          />
+          <button
+            type="submit"
+            disabled={sending || !draft.trim() || lockStatus?.isLockedNow}
+            className="clay-btn flex h-10 w-10 shrink-0 items-center justify-center rounded-full disabled:opacity-70"
+            aria-label="Send"
+          >
+            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          </button>
+        </form>
+        {error && <p className="mt-2 text-xs font-medium text-[var(--destructive)]">{error}</p>}
+      </div>
     </div>
   );
 }
