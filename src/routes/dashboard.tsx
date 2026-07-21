@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   Loader2,
@@ -8,10 +8,13 @@ import {
   Calendar,
   ArrowRight,
   ChevronRight,
+  GraduationCap,
+  Star,
+  BadgeCheck,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { getProfile } from "@/server-functions/profile";
-import { listPublicBundles, listPublicMentorshipBatches } from "@/server-functions/catalog";
+import { listPublicBundles, listPublicMentorshipBatches, listPublicMentors } from "@/server-functions/catalog";
 import { AppHeader } from "@/components/app-header";
 
 export const Route = createFileRoute("/dashboard")({
@@ -49,6 +52,18 @@ type MentorshipBatch = {
   discountPercent: number;
   thumbnailUrl: string | null;
   mentorName: string | null;
+};
+
+type MentorDirectoryEntry = {
+  id: string;
+  name: string;
+  profilePictureUrl: string | null;
+  yearOfStudy: string;
+  aboutText: string;
+  avgRating: number | null;
+  reviewCount: number;
+  batches: { id: string; name: string; track: string }[];
+  searchText: string;
 };
 
 // A normalized shape both bundles and mentorship batches map into, so a
@@ -110,8 +125,10 @@ function DashboardPage() {
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [bundles, setBundles] = useState<Bundle[] | null>(null);
   const [batches, setBatches] = useState<MentorshipBatch[] | null>(null);
+  const [mentors, setMentors] = useState<MentorDirectoryEntry[] | null>(null);
   const [search, setSearch] = useState("");
   const [trackFilter, setTrackFilter] = useState<TrackFilter>("All");
+  const [mentorSearch, setMentorSearch] = useState("");
 
   useEffect(() => {
     if (!loading && !user) {
@@ -123,10 +140,11 @@ function DashboardPage() {
     if (!user) return;
     (async () => {
       const token = await user.getIdToken();
-      const [{ profile: p }, { bundles: bundleRows }, { batches: batchRows }] = await Promise.all([
+      const [{ profile: p }, { bundles: bundleRows }, { batches: batchRows }, { mentors: mentorRows }] = await Promise.all([
         getProfile({ data: { token } }),
         listPublicBundles({ data: { token } }),
         listPublicMentorshipBatches({ data: { token } }),
+        listPublicMentors({ data: { token } }),
       ]);
       if (p) {
         setProfile({
@@ -137,6 +155,7 @@ function DashboardPage() {
       }
       setBundles(bundleRows as Bundle[]);
       setBatches(batchRows as MentorshipBatch[]);
+      setMentors(mentorRows as MentorDirectoryEntry[]);
     })();
   }, [user]);
 
@@ -167,6 +186,17 @@ function DashboardPage() {
       return matchesTrack && matchesSearch;
     });
   }, [allListings, search, trackFilter]);
+
+  // Mentor search only filters when the student actually types something —
+  // an empty query shows nothing rather than dumping the whole directory,
+  // since this section is meant for "I'm looking for a specific mentor",
+  // distinct from casually browsing batches below.
+  const matchedMentors = useMemo(() => {
+    if (!mentors) return [];
+    const q = mentorSearch.trim().toLowerCase();
+    if (!q) return [];
+    return mentors.filter((m) => m.searchText.includes(q));
+  }, [mentors, mentorSearch]);
 
   if (loading || !user) {
     return (
@@ -234,6 +264,47 @@ function DashboardPage() {
           </section>
         )}
 
+        <section className="mb-12">
+          <div className="mb-5">
+            <h2 className="font-display text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+              Search Mentors
+            </h2>
+            <p className="mt-1 text-sm text-foreground/60">
+              Looking for a specific mentor? Search by name, batch, or what they teach.
+            </p>
+          </div>
+
+          <div className="clay-inset mb-5 flex items-center gap-2 rounded-full px-4 py-2.5">
+            <Search className="h-4 w-4 shrink-0 text-foreground/40" />
+            <input
+              value={mentorSearch}
+              onChange={(e) => setMentorSearch(e.target.value)}
+              placeholder="Search mentors by name…"
+              className="w-full bg-transparent text-sm text-foreground placeholder:text-foreground/40 focus:outline-none"
+            />
+          </div>
+
+          {mentors === null ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-foreground/40" />
+            </div>
+          ) : !mentorSearch.trim() ? (
+            <div className="clay-inset rounded-2xl p-6 text-center text-sm text-foreground/50">
+              Start typing to find a mentor.
+            </div>
+          ) : matchedMentors.length === 0 ? (
+            <div className="clay p-6 text-center text-sm text-foreground/60">
+              No mentors match "{mentorSearch}".
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {matchedMentors.map((m) => (
+                <MentorCard key={m.id} mentor={m} />
+              ))}
+            </div>
+          )}
+        </section>
+
         <section>
           <div className="mb-5">
             <h2 className="font-display text-xl font-bold tracking-tight text-foreground sm:text-2xl">
@@ -288,6 +359,43 @@ function DashboardPage() {
         </section>
       </main>
     </div>
+  );
+}
+
+function MentorCard({ mentor }: { mentor: MentorDirectoryEntry }) {
+  return (
+    <Link to="/mentor-profile/$mentorId" params={{ mentorId: mentor.id }} className="clay flex gap-4 p-4 transition hover:bg-foreground/5">
+      <div className="clay-inset flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full">
+        {mentor.profilePictureUrl ? (
+          <img src={mentor.profilePictureUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <span className="font-display text-lg font-bold text-foreground/50">{mentor.name.charAt(0)}</span>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <p className="truncate font-display text-sm font-bold text-foreground">{mentor.name}</p>
+          <BadgeCheck className="h-3.5 w-3.5 shrink-0 fill-[var(--sky-deep)] text-white" />
+        </div>
+        {mentor.yearOfStudy && <p className="text-xs text-foreground/50">{mentor.yearOfStudy}</p>}
+        {mentor.avgRating !== null && (
+          <div className="mt-1 flex items-center gap-1">
+            <Star className="h-3 w-3 fill-[var(--sky-deep)] text-[var(--sky-deep)]" />
+            <span className="text-xs font-semibold text-foreground">{mentor.avgRating}</span>
+            <span className="text-[10px] text-foreground/40">({mentor.reviewCount})</span>
+          </div>
+        )}
+        {mentor.batches.length > 0 && (
+          <div className="mt-2 flex items-center gap-1.5 text-xs text-foreground/60">
+            <GraduationCap className="h-3.5 w-3.5 shrink-0 text-foreground/40" />
+            <span className="truncate">
+              {mentor.batches.length === 1 ? mentor.batches[0].name : `${mentor.batches.length} batches`}
+            </span>
+          </div>
+        )}
+      </div>
+      <ChevronRight className="h-4 w-4 shrink-0 self-center text-foreground/30" />
+    </Link>
   );
 }
 
@@ -372,3 +480,4 @@ function ListingCard({ listing }: { listing: Listing }) {
     </div>
   );
 }
+

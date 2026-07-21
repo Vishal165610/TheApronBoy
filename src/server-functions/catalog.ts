@@ -231,3 +231,71 @@ export const submitSupportTicket = createServerFn({ method: "POST" })
     });
     return { ok: true };
   });
+
+  // ─── Public mentor directory ────────────────────────────────────────────────
+// Lists every mentor who has at least one mentorship batch, with enough
+// summary info for a search/browse card. Full details (about, locked
+// credentials, all batches) live behind getPublicMentorFullProfile on the
+// dedicated /mentor-profile/$mentorId page — this is just the directory.
+export const listPublicMentors = createServerFn({ method: "GET" })
+  .validator((data: { token: string }) => data)
+  .handler(async ({ data }) => {
+    await requireSignedIn(data.token);
+    const db = await getDb();
+
+    const batches = await db.collection("mentorshipBatches").find({ assignedMentorId: { $ne: null } }).toArray();
+    const mentorIds = [...new Set(batches.map((b) => b.assignedMentorId as string))];
+    if (mentorIds.length === 0) return { mentors: [] };
+
+    const { ObjectId } = await import("mongodb");
+    const mentors = await db
+      .collection("mentors")
+      .find({ _id: { $in: mentorIds.map((id) => new ObjectId(id)) } })
+      .toArray();
+
+    // Aggregate rating across every session per mentor, same approach as
+    // getPublicMentorFullProfile, so the directory card can show a rating
+    // at a glance without a separate round trip per mentor.
+    const sessions = await db.collection("mentorshipSessions").find({ mentorId: { $in: mentorIds } }).toArray();
+    const sessionIdsByMentor = new Map<string, string[]>();
+    for (const s of sessions) {
+      const list = sessionIdsByMentor.get(s.mentorId as string) ?? [];
+      list.push(String(s._id));
+      sessionIdsByMentor.set(s.mentorId as string, list);
+    }
+    const allSessionIds = sessions.map((s) => String(s._id));
+    const reviews =
+      allSessionIds.length > 0
+        ? await db.collection("sessionReviews").find({ sessionId: { $in: allSessionIds } }).toArray()
+        : [];
+
+    const batchesByMentor = new Map<string, { id: string; name: string; track: string }[]>();
+    for (const b of batches) {
+      const mid = b.assignedMentorId as string;
+      const list = batchesByMentor.get(mid) ?? [];
+      list.push({ id: String(b._id), name: b.name as string, track: b.track as string });
+      batchesByMentor.set(mid, list);
+    }
+
+    return {
+      mentors: mentors.map((m) => {
+        const mentorId = String(m._id);
+        const mySessionIds = new Set(sessionIdsByMentor.get(mentorId) ?? []);
+        const myReviews = reviews.filter((r) => mySessionIds.has(r.sessionId as string));
+        const avgRating =
+          myReviews.length > 0 ? myReviews.reduce((sum, r) => sum + (r.rating as number), 0) / myReviews.length : null;
+
+        return {
+          id: mentorId,
+          name: m.name as string,
+          profilePictureUrl: (m.profilePictureUrl as string | null) ?? null,
+          yearOfStudy: (m.yearOfStudy as string) ?? "",
+          aboutText: (m.aboutText as string) ?? "",
+          avgRating: avgRating !== null ? Math.round(avgRating * 10) / 10 : null,
+          reviewCount: myReviews.length,
+          batches: batchesByMentor.get(mentorId) ?? [],
+          searchText: `${m.name as string} ${(m.aboutText as string) ?? ""} ${(batchesByMentor.get(mentorId) ?? []).map((b) => b.name).join(" ")}`.toLowerCase(),
+        };
+      }),
+    };
+  });
