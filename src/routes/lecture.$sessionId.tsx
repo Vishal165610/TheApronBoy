@@ -10,11 +10,14 @@ import {
   Star as StarIcon,
   CheckCircle2,
   BadgeCheck,
+  Users2,
+  Clock,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { AppHeader } from "@/components/app-header";
 import { VideoPlayer } from "@/components/clay-video-player";
 import { ClayStarRating } from "@/components/clay-star-rating";
+import { PdfPreviewModal } from "@/components/pdf-preview-modal";
 import {
   getLectureSessionForStudent,
   listLectureCommentsForStudent,
@@ -66,6 +69,7 @@ function LecturePage() {
   const [notes, setNotes] = useState<NoteRow[] | null>(null);
   const [initialTime, setInitialTime] = useState(0);
   const [completed, setCompleted] = useState(false);
+  const [pdfModal, setPdfModal] = useState<{ url: string; name: string } | null>(null);
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
@@ -127,30 +131,30 @@ function LecturePage() {
 
       <AppHeader user={user} />
 
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+      <main className="mx-auto max-w-6xl px-3 py-5 sm:px-6 sm:py-6">
         <button
           onClick={() =>
             session
               ? navigate({ to: "/course/$kind/$id", params: { kind: "mentorship", id: session.batchId } })
               : navigate({ to: "/dashboard" })
           }
-          className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-foreground/60 hover:text-foreground"
+          className="group mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-foreground/60 transition-colors hover:text-foreground"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
           Back to batch
         </button>
 
         {loadError ? (
-          <div className="clay p-8 text-center text-sm text-foreground/60">{loadError}</div>
-        ) : !session ? (
-          <div className="flex justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-foreground/40" />
+          <div className="clay animate-in fade-in p-8 text-center text-sm text-foreground/60 duration-300">
+            {loadError}
           </div>
+        ) : !session ? (
+          <LecturePageSkeleton />
         ) : (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="animate-in fade-in slide-in-from-bottom-2 grid grid-cols-1 gap-4 duration-300 sm:gap-6 lg:grid-cols-3">
             {/* ── Left: video, meta, notes, rating ─────────────────────── */}
-            <div className="space-y-6 lg:col-span-2">
-              <div className="clay p-3">
+            <div className="space-y-4 sm:space-y-6 lg:col-span-2">
+              <div className="clay p-2 sm:p-3">
                 <VideoPlayer
                   src={session.lectureUrl}
                   initialTime={initialTime}
@@ -159,49 +163,54 @@ function LecturePage() {
                 />
               </div>
 
-              <div className="clay p-5 sm:p-6">
+              <div className="clay p-4 sm:p-6">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h1 className="font-display text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+                  <div className="min-w-0">
+                    <h1 className="truncate font-display text-lg font-bold tracking-tight text-foreground sm:text-2xl">
                       {session.lectureTitle}
                     </h1>
-                    <p className="mt-1 text-sm text-foreground/60">
-                      {session.batchName}
-                      {session.mentorName && ` · ${session.mentorName}`}
-                    </p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-foreground/60 sm:text-sm">
+                      <span className="inline-flex items-center gap-1">
+                        <Users2 className="h-3.5 w-3.5 text-foreground/40" />
+                        {session.batchName}
+                      </span>
+                      {session.mentorName && <span className="text-foreground/30">·</span>}
+                      {session.mentorName && <span className="font-medium">{session.mentorName}</span>}
+                    </div>
                   </div>
-                  {completed && (
-                    <span className="clay-chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-foreground">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-[var(--sky-deep)]" />
-                      Watched
-                    </span>
-                  )}
+                  <span
+                    className={`clay-chip inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all duration-300 ${
+                      completed ? "text-foreground opacity-100" : "pointer-events-none scale-95 opacity-0"
+                    }`}
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5 text-[var(--sky-deep)]" />
+                    Watched
+                  </span>
                 </div>
               </div>
 
               {notes && notes.length > 0 && (
-                <div className="clay p-5 sm:p-6">
+                <div className="clay p-4 sm:p-6">
                   <div className="mb-3 flex items-center gap-2">
                     <FileText className="h-4 w-4 text-foreground/60" />
-                    <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-foreground/60">
+                    <h2 className="text-xs font-semibold uppercase tracking-[0.15em] text-foreground/60 sm:text-sm">
                       Notes for this batch
                     </h2>
                   </div>
-                  <ul className="space-y-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     {notes.map((n) => (
-                      <li key={n.id}>
-                        <a
-                          href={n.fileUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="clay-inset flex items-center gap-3 rounded-2xl px-4 py-3 transition hover:bg-foreground/5"
-                        >
-                          <FileText className="h-4 w-4 shrink-0 text-foreground/40" />
-                          <span className="truncate text-sm font-medium text-foreground">{n.fileName}</span>
-                        </a>
-                      </li>
+                      <button
+                        key={n.id}
+                        onClick={() => setPdfModal({ url: n.fileUrl, name: n.fileName })}
+                        className="clay-inset flex items-center gap-3 rounded-2xl px-4 py-3 text-left transition-transform hover:-translate-y-0.5 hover:bg-foreground/5"
+                      >
+                        <div className="clay flex h-9 w-9 shrink-0 items-center justify-center rounded-xl">
+                          <FileText className="h-4 w-4 text-foreground/50" />
+                        </div>
+                        <span className="min-w-0 truncate text-sm font-medium text-foreground">{n.fileName}</span>
+                      </button>
                     ))}
-                  </ul>
+                  </div>
                 </div>
               )}
 
@@ -221,6 +230,22 @@ function LecturePage() {
           </div>
         )}
       </main>
+
+      {pdfModal && <PdfPreviewModal url={pdfModal.url} name={pdfModal.name} onClose={() => setPdfModal(null)} />}
+    </div>
+  );
+}
+
+// ─── Loading skeleton — mirrors the final layout's shape so the page
+// doesn't visually "jump" once real content arrives. ───────────────────────
+function LecturePageSkeleton() {
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
+      <div className="space-y-4 sm:space-y-6 lg:col-span-2">
+        <div className="clay aspect-video w-full animate-pulse bg-foreground/5 p-2 sm:p-3" />
+        <div className="clay h-20 animate-pulse bg-foreground/5 p-4 sm:p-6" />
+      </div>
+      <div className="clay h-[28rem] animate-pulse bg-foreground/5 lg:col-span-1" />
     </div>
   );
 }
@@ -260,10 +285,10 @@ function RatingPanel({ sessionId, batchId }: { sessionId: string; batchId: strin
   }
 
   return (
-    <div className="clay p-5 sm:p-6">
+    <div className="clay p-4 sm:p-6">
       <div className="mb-3 flex items-center gap-2">
         <StarIcon className="h-4 w-4 text-foreground/60" />
-        <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-foreground/60">
+        <h2 className="text-xs font-semibold uppercase tracking-[0.15em] text-foreground/60 sm:text-sm">
           Rate this lecture
         </h2>
       </div>
@@ -278,7 +303,7 @@ function RatingPanel({ sessionId, batchId }: { sessionId: string; batchId: strin
       <button
         onClick={handleSave}
         disabled={rating === 0 || saving}
-        className="clay-btn mt-3 flex items-center justify-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold disabled:opacity-70"
+        className="clay-btn mt-3 flex w-full items-center justify-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold transition-transform hover:scale-[1.02] disabled:opacity-70 disabled:hover:scale-100 sm:w-auto"
       >
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? "Saved!" : "Save rating"}
       </button>
@@ -328,31 +353,52 @@ function DiscussionPanel({
     }
   }
 
+  const commentCount = comments?.length ?? 0;
+
   return (
-    <div className="clay flex h-[32rem] flex-col overflow-hidden">
-      <div className="flex shrink-0 items-center gap-2 border-b border-foreground/10 px-5 py-4">
-        <MessageSquare className="h-4 w-4 text-foreground/60" />
-        <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-foreground/60">
-          Discussion
-        </h2>
+    <div className="clay flex h-[26rem] flex-col overflow-hidden sm:h-[32rem]">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-foreground/10 px-4 py-3.5 sm:px-5 sm:py-4">
+        <div className="flex items-center gap-2">
+          <MessageSquare className="h-4 w-4 text-foreground/60" />
+          <h2 className="text-xs font-semibold uppercase tracking-[0.15em] text-foreground/60 sm:text-sm">
+            Discussion
+          </h2>
+        </div>
+        {commentCount > 0 && (
+          <span className="rounded-full bg-foreground/5 px-2.5 py-1 text-[10px] font-bold text-foreground/50">
+            {commentCount}
+          </span>
+        )}
       </div>
 
       {/* This is the ONLY scrollable region — the outer container's height
-          is fixed (h-[32rem]), so the page itself never grows past the
-          player + panels above. */}
-      <div className="flex-1 space-y-2.5 overflow-y-auto px-5 py-4">
+          is fixed, so the page itself never grows past the player + panels
+          on the left. */}
+      <div className="flex-1 space-y-2.5 overflow-y-auto px-4 py-4 sm:px-5">
         {comments === null ? (
-          <div className="flex justify-center py-6">
-            <Loader2 className="h-5 w-5 animate-spin text-foreground/40" />
+          <div className="space-y-2.5">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="clay-inset flex animate-pulse gap-2.5 px-3.5 py-2.5">
+                <div className="h-7 w-7 shrink-0 rounded-full bg-foreground/10" />
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-2.5 w-1/3 rounded bg-foreground/10" />
+                  <div className="h-2.5 w-2/3 rounded bg-foreground/10" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : comments.length === 0 ? (
-          <p className="text-sm text-foreground/50">No comments yet — ask a question or share a thought.</p>
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+            <MessageSquare className="h-7 w-7 text-foreground/20" strokeWidth={1.5} />
+            <p className="text-xs text-foreground/50">No comments yet — ask a question or share a thought.</p>
+          </div>
         ) : (
-          comments.map((c) =>
+          comments.map((c, i) =>
             c.isMentor ? (
               <div
                 key={c.id}
-                className="clay flex gap-2.5 border-2 border-[var(--sky-deep)]/30 bg-[var(--sky-soft)]/30 px-3.5 py-2.5"
+                style={{ animationDelay: `${Math.min(i, 5) * 40}ms` }}
+                className="animate-in fade-in slide-in-from-bottom-1 clay flex gap-2.5 border-2 border-[var(--sky-deep)]/30 bg-[var(--sky-soft)]/30 px-3.5 py-2.5 duration-300"
               >
                 <div className="clay flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full">
                   {c.profilePictureUrl ? (
@@ -386,7 +432,13 @@ function DiscussionPanel({
                 </div>
               </div>
             ) : (
-              <div key={c.id} className={`clay-inset flex gap-2.5 px-3.5 py-2.5 ${c.hidden ? "opacity-50" : ""}`}>
+              <div
+                key={c.id}
+                style={{ animationDelay: `${Math.min(i, 5) * 40}ms` }}
+                className={`animate-in fade-in slide-in-from-bottom-1 clay-inset flex gap-2.5 px-3.5 py-2.5 duration-300 ${
+                  c.hidden ? "opacity-50" : ""
+                }`}
+              >
                 <div className="clay flex h-7 w-7 shrink-0 items-center justify-center rounded-full">
                   <User2 className="h-3 w-3 text-foreground/40" />
                 </div>
@@ -413,6 +465,9 @@ function DiscussionPanel({
 
       <div className="shrink-0 border-t border-foreground/10 p-3">
         <form onSubmit={handleSubmit} className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 text-foreground/30">
+            <Clock className="hidden h-3.5 w-3.5 sm:block" />
+          </div>
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -422,13 +477,17 @@ function DiscussionPanel({
           <button
             type="submit"
             disabled={sending || !draft.trim()}
-            className="clay-btn flex h-9 w-9 shrink-0 items-center justify-center rounded-full disabled:opacity-70"
+            className="clay-btn flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-transform hover:scale-105 disabled:opacity-70 disabled:hover:scale-100"
             aria-label="Post comment"
           >
             {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
           </button>
         </form>
-        {error && <p className="mt-2 text-xs font-medium text-[var(--destructive)]">{error}</p>}
+        {error && (
+          <p className="animate-in fade-in mt-2 text-xs font-medium text-[var(--destructive)] duration-200">
+            {error}
+          </p>
+        )}
       </div>
     </div>
   );

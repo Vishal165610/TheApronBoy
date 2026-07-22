@@ -21,6 +21,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as TestTestIdRouteImport } from './routes/test.$testId'
 import { Route as TestResultAttemptIdRouteImport } from './routes/test-result.$attemptId'
 import { Route as TestAnalysisTestIdRouteImport } from './routes/test-analysis.$testId'
+import { Route as SimulatorLiveRouteImport } from './routes/simulator/live'
 import { Route as MentorDashboardRouteImport } from './routes/mentor.dashboard'
 import { Route as MentorProfileMentorIdRouteImport } from './routes/mentor-profile.$mentorId'
 import { Route as LegalTermsRouteImport } from './routes/legal/terms'
@@ -91,6 +92,11 @@ const TestAnalysisTestIdRoute = TestAnalysisTestIdRouteImport.update({
   path: '/test-analysis/$testId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SimulatorLiveRoute = SimulatorLiveRouteImport.update({
+  id: '/simulator/live',
+  path: '/simulator/live',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MentorDashboardRoute = MentorDashboardRouteImport.update({
   id: '/mentor/dashboard',
   path: '/mentor/dashboard',
@@ -155,6 +161,7 @@ export interface FileRoutesByFullPath {
   '/legal/terms': typeof LegalTermsRoute
   '/mentor-profile/$mentorId': typeof MentorProfileMentorIdRoute
   '/mentor/dashboard': typeof MentorDashboardRoute
+  '/simulator/live': typeof SimulatorLiveRoute
   '/test-analysis/$testId': typeof TestAnalysisTestIdRoute
   '/test-result/$attemptId': typeof TestResultAttemptIdRoute
   '/test/$testId': typeof TestTestIdRoute
@@ -178,6 +185,7 @@ export interface FileRoutesByTo {
   '/legal/terms': typeof LegalTermsRoute
   '/mentor-profile/$mentorId': typeof MentorProfileMentorIdRoute
   '/mentor/dashboard': typeof MentorDashboardRoute
+  '/simulator/live': typeof SimulatorLiveRoute
   '/test-analysis/$testId': typeof TestAnalysisTestIdRoute
   '/test-result/$attemptId': typeof TestResultAttemptIdRoute
   '/test/$testId': typeof TestTestIdRoute
@@ -202,6 +210,7 @@ export interface FileRoutesById {
   '/legal/terms': typeof LegalTermsRoute
   '/mentor-profile/$mentorId': typeof MentorProfileMentorIdRoute
   '/mentor/dashboard': typeof MentorDashboardRoute
+  '/simulator/live': typeof SimulatorLiveRoute
   '/test-analysis/$testId': typeof TestAnalysisTestIdRoute
   '/test-result/$attemptId': typeof TestResultAttemptIdRoute
   '/test/$testId': typeof TestTestIdRoute
@@ -227,6 +236,7 @@ export interface FileRouteTypes {
     | '/legal/terms'
     | '/mentor-profile/$mentorId'
     | '/mentor/dashboard'
+    | '/simulator/live'
     | '/test-analysis/$testId'
     | '/test-result/$attemptId'
     | '/test/$testId'
@@ -250,6 +260,7 @@ export interface FileRouteTypes {
     | '/legal/terms'
     | '/mentor-profile/$mentorId'
     | '/mentor/dashboard'
+    | '/simulator/live'
     | '/test-analysis/$testId'
     | '/test-result/$attemptId'
     | '/test/$testId'
@@ -273,6 +284,7 @@ export interface FileRouteTypes {
     | '/legal/terms'
     | '/mentor-profile/$mentorId'
     | '/mentor/dashboard'
+    | '/simulator/live'
     | '/test-analysis/$testId'
     | '/test-result/$attemptId'
     | '/test/$testId'
@@ -297,6 +309,7 @@ export interface RootRouteChildren {
   LegalTermsRoute: typeof LegalTermsRoute
   MentorProfileMentorIdRoute: typeof MentorProfileMentorIdRoute
   MentorDashboardRoute: typeof MentorDashboardRoute
+  SimulatorLiveRoute: typeof SimulatorLiveRoute
   TestAnalysisTestIdRoute: typeof TestAnalysisTestIdRoute
   TestResultAttemptIdRoute: typeof TestResultAttemptIdRoute
   TestTestIdRoute: typeof TestTestIdRoute
@@ -389,6 +402,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TestAnalysisTestIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/simulator/live': {
+      id: '/simulator/live'
+      path: '/simulator/live'
+      fullPath: '/simulator/live'
+      preLoaderRoute: typeof SimulatorLiveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/mentor/dashboard': {
       id: '/mentor/dashboard'
       path: '/mentor/dashboard'
@@ -473,6 +493,7 @@ const rootRouteChildren: RootRouteChildren = {
   LegalTermsRoute: LegalTermsRoute,
   MentorProfileMentorIdRoute: MentorProfileMentorIdRoute,
   MentorDashboardRoute: MentorDashboardRoute,
+  SimulatorLiveRoute: SimulatorLiveRoute,
   TestAnalysisTestIdRoute: TestAnalysisTestIdRoute,
   TestResultAttemptIdRoute: TestResultAttemptIdRoute,
   TestTestIdRoute: TestTestIdRoute,

@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   Loader2,
@@ -28,10 +28,15 @@ import {
   CheckCircle2,
   MessageSquare,
   Send,
+  BadgeCheck,
+  ExternalLink,
+  Download,
+  ChevronRight,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { AppHeader } from "@/components/app-header";
 import { ClayStarRating } from "@/components/clay-star-rating";
+import { VideoPlayer } from "@/components/clay-video-player";
 import {
   getPublicBundleDetail,
   getPublicMentorshipDetail,
@@ -165,7 +170,7 @@ function tabsForKind(kind: Kind): { key: TabKey; label: string; icon: typeof Lay
       icon: kind === "bundle" ? ClipboardList : CalendarClock,
     },
     { key: "assets", label: "Assets", icon: FolderOpen },
-    { key: "announcements", label: "Announcements", icon: Megaphone },
+    { key: "announcements", label: "Updates", icon: Megaphone },
   ];
   if (kind === "mentorship") {
     base.push({ key: "chat", label: "Chat", icon: MessageSquare });
@@ -187,7 +192,7 @@ function CourseHubPage() {
   const [sessions, setSessions] = useState<SessionRow[] | null>(null);
   const [announcements, setAnnouncements] = useState<AnnouncementRow[] | null>(null);
   const [isPurchased, setIsPurchased] = useState<boolean | null>(null);
-  const [pdfModalUrl, setPdfModalUrl] = useState<string | null>(null);
+  const [pdfModal, setPdfModal] = useState<{ url: string; name: string } | null>(null);
   const [purchasing, setPurchasing] = useState(false);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
 
@@ -247,6 +252,7 @@ function CourseHubPage() {
   const sellingPrice = kind === "bundle" ? bundle?.sellingPrice : mentorship?.sellingPrice;
   const crossedPrice = kind === "bundle" ? bundle?.crossedPrice : mentorship?.crossedPrice;
   const discountPercent = kind === "bundle" ? bundle?.discountPercent : mentorship?.discountPercent;
+  const showPurchaseBar = !isPurchased && sellingPrice !== undefined;
 
   async function handlePurchase() {
     if (!user) return;
@@ -311,7 +317,12 @@ function CourseHubPage() {
 
       <AppHeader user={user} />
 
-      <div className="mx-auto flex max-w-6xl gap-6 px-4 pb-28 pt-6 sm:px-6 md:pb-8">
+      <div
+        className={`mx-auto flex max-w-6xl gap-6 px-3 pt-5 sm:px-6 sm:pt-6 ${
+          showPurchaseBar ? "pb-56 sm:pb-32" : "pb-28 sm:pb-8"
+        }`}
+      >
+        {/* ── Desktop sidebar ─────────────────────────────────────────── */}
         <aside className="sticky top-20 hidden h-fit w-52 shrink-0 flex-col gap-1 md:flex">
           {TABS.map((t) => {
             const Icon = t.icon;
@@ -320,8 +331,8 @@ function CourseHubPage() {
               <button
                 key={t.key}
                 onClick={() => setActiveTab(t.key)}
-                className={`flex items-center gap-3 rounded-2xl px-4 py-2.5 text-sm font-semibold transition-all ${
-                  active ? "clay-btn text-white" : "text-foreground/70 hover:bg-foreground/5"
+                className={`flex items-center gap-3 rounded-2xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 ${
+                  active ? "clay-btn text-white" : "text-foreground/70 hover:translate-x-0.5 hover:bg-foreground/5"
                 }`}
               >
                 <Icon className="h-4 w-4" />
@@ -332,62 +343,69 @@ function CourseHubPage() {
         </aside>
 
         <main className="min-w-0 flex-1">
-          <div className="clay mb-6 flex items-center gap-4 p-5 sm:p-6">
-            <div className="clay-inset flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[var(--sky-soft)]">
+          <div className="clay mb-5 flex items-center gap-4 p-4 sm:mb-6 sm:p-6">
+            <div className="clay-inset flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[var(--sky-soft)] sm:h-14 sm:w-14">
               {kind === "bundle" ? (
-                <BookOpen className="h-6 w-6 text-foreground/40" />
+                <BookOpen className="h-5 w-5 text-foreground/40 sm:h-6 sm:w-6" />
               ) : (
-                <Users2 className="h-6 w-6 text-foreground/40" />
+                <Users2 className="h-5 w-5 text-foreground/40 sm:h-6 sm:w-6" />
               )}
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide text-foreground/50">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground/50 sm:text-xs">
                 {kind === "bundle" ? "Test Series" : "Mentorship"}
               </p>
-              <h1 className="truncate font-display text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+              <h1 className="truncate font-display text-lg font-bold tracking-tight text-foreground sm:text-2xl">
                 {title ?? "…"}
               </h1>
             </div>
           </div>
 
-          {activeTab === "overview" && (
-            <OverviewTab
-              kind={kind}
-              bundle={bundle}
-              mentorship={mentorship}
-              mentorProfile={mentorProfile}
-              isPurchased={isPurchased}
-              user={user}
-              itemId={id}
-            />
-          )}
-          {activeTab === "tests" && kind === "bundle" && (
-            <TestsTab tests={tests} isPurchased={isPurchased} navigate={navigate} user={user} />
-          )}
-          {activeTab === "tests" && kind === "mentorship" && (
-            <SessionsTab sessions={sessions} isPurchased={isPurchased} batchId={id} user={user} />
-          )}
-          {activeTab === "assets" && (
-            <AssetsTab
-              kind={kind}
-              bundle={bundle}
-              batchId={id}
-              isPurchased={isPurchased}
-              user={user}
-              onOpenPdf={setPdfModalUrl}
-            />
-          )}
-          {activeTab === "announcements" && (
-            <AnnouncementsTab announcements={announcements} isPurchased={isPurchased} />
-          )}
-          {activeTab === "chat" && kind === "mentorship" && (
-            <ChatTab batchId={id} isPurchased={isPurchased} user={user} />
-          )}
-          {activeTab === "help" && <HelpTab isPurchased={isPurchased} user={user} kind={kind} itemId={id} />}
+          <div key={activeTab} className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+            {activeTab === "overview" && (
+              <OverviewTab
+                kind={kind}
+                bundle={bundle}
+                mentorship={mentorship}
+                mentorProfile={mentorProfile}
+                isPurchased={isPurchased}
+                user={user}
+                itemId={id}
+              />
+            )}
+            {activeTab === "tests" && kind === "bundle" && (
+              <TestsTab tests={tests} isPurchased={isPurchased} navigate={navigate} user={user} />
+            )}
+            {activeTab === "tests" && kind === "mentorship" && (
+              <SessionsTab sessions={sessions} isPurchased={isPurchased} batchId={id} user={user} />
+            )}
+            {activeTab === "assets" && (
+              <AssetsTab
+                kind={kind}
+                bundle={bundle}
+                batchId={id}
+                isPurchased={isPurchased}
+                user={user}
+                onOpenPdf={(url, name) => setPdfModal({ url, name })}
+              />
+            )}
+            {activeTab === "announcements" && (
+              <AnnouncementsTab announcements={announcements} isPurchased={isPurchased} />
+            )}
+            {activeTab === "chat" && kind === "mentorship" && (
+              <ChatTab batchId={id} isPurchased={isPurchased} user={user} />
+            )}
+            {activeTab === "help" && <HelpTab isPurchased={isPurchased} user={user} kind={kind} itemId={id} />}
+          </div>
         </main>
       </div>
 
-      <nav className="clay fixed inset-x-3 bottom-3 z-30 flex items-center justify-around gap-1 rounded-3xl p-2 md:hidden">
+      {/* ── Mobile bottom nav ───────────────────────────────────────────── */}
+      <nav
+        className={`clay fixed inset-x-3 z-30 flex items-center justify-around gap-0.5 rounded-3xl p-1.5 transition-all duration-300 md:hidden ${
+          showPurchaseBar ? "bottom-[6.75rem]" : "bottom-3"
+        }`}
+      >
         {TABS.map((t) => {
           const Icon = t.icon;
           const active = activeTab === t.key;
@@ -395,7 +413,7 @@ function CourseHubPage() {
             <button
               key={t.key}
               onClick={() => setActiveTab(t.key)}
-              className={`flex flex-1 flex-col items-center gap-0.5 rounded-2xl py-2 text-[10px] font-semibold transition-all ${
+              className={`flex flex-1 flex-col items-center gap-0.5 rounded-2xl py-2 text-[9px] font-semibold transition-all duration-200 ${
                 active ? "clay-btn text-white" : "text-foreground/60"
               }`}
             >
@@ -406,11 +424,12 @@ function CourseHubPage() {
         })}
       </nav>
 
-      {!isPurchased && sellingPrice !== undefined && (
-        <div className="fixed inset-x-0 bottom-16 z-20 px-3 md:bottom-4">
+      {/* ── Sticky purchase bar ─────────────────────────────────────────── */}
+      {showPurchaseBar && (
+        <div className="fixed inset-x-0 bottom-3 z-20 px-3">
           <div className="clay mx-auto flex max-w-xl items-center justify-between gap-3 p-4 sm:p-5">
-            <div>
-              <div className="flex items-baseline gap-2">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-baseline gap-x-2">
                 <span className="font-display text-lg font-bold text-foreground">
                   ₹{sellingPrice.toLocaleString()}
                 </span>
@@ -423,14 +442,14 @@ function CourseHubPage() {
                   <span className="text-xs font-semibold text-[var(--sky-deep)]">{discountPercent}% OFF</span>
                 ) : null}
               </div>
-              <p className="text-xs text-foreground/50">Purchase Batch to Unlock Everything</p>
+              <p className="truncate text-xs text-foreground/50">Purchase to unlock everything</p>
             </div>
             <button
               onClick={handlePurchase}
               disabled={purchasing}
-              className="clay-btn flex shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold disabled:opacity-70"
+              className="clay-btn flex shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-transform hover:scale-105 disabled:opacity-70 disabled:hover:scale-100"
             >
-              {purchasing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Purchase Batch"}
+              {purchasing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Purchase"}
             </button>
           </div>
           {purchaseError && (
@@ -441,29 +460,62 @@ function CourseHubPage() {
         </div>
       )}
 
-      {pdfModalUrl && (
-        <div
-          className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4"
-          onClick={() => setPdfModalUrl(null)}
-        >
-          <div
-            className="clay flex h-[85vh] w-full max-w-3xl flex-col overflow-hidden p-3"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-2 flex items-center justify-between px-2">
-              <p className="text-sm font-semibold text-foreground">Document preview</p>
-              <button onClick={() => setPdfModalUrl(null)} className="text-foreground/40 hover:text-foreground/70">
-                <X className="h-5 w-5" />
-              </button>
+      {pdfModal && <PdfPreviewModal url={pdfModal.url} name={pdfModal.name} onClose={() => setPdfModal(null)} />}
+    </div>
+  );
+}
+
+// ─── Redesigned PDF preview — no Google Docs redirect. Browsers render PDFs
+// natively inside an iframe, so this points straight at the source (or the
+// base64 data URI for watermarked notes) with a clean header offering
+// "Open in new tab" and "Download" as explicit, honest actions rather than
+// silently proxying through a third party. ─────────────────────────────────
+function PdfPreviewModal({ url, name, onClose }: { url: string; name: string; onClose: () => void }) {
+  return (
+    <div
+      className="animate-in fade-in fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-3 backdrop-blur-sm duration-200 sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        className="animate-in zoom-in-95 clay flex h-[90vh] w-full max-w-3xl flex-col overflow-hidden p-2 duration-200 sm:p-3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-2 flex items-center justify-between gap-2 px-2 py-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="clay-inset flex h-8 w-8 shrink-0 items-center justify-center rounded-xl">
+              <FileText className="h-4 w-4 text-foreground/50" />
             </div>
-            <iframe
-              title="Document preview"
-              src={pdfModalUrl.startsWith("data:") ? pdfModalUrl : `https://docs.google.com/viewer?url=${encodeURIComponent(pdfModalUrl)}&embedded=true`}
-              className="clay-inset h-full w-full flex-1 rounded-2xl"
-            />
+            <p className="truncate text-sm font-semibold text-foreground">{name}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-foreground/50 transition hover:bg-foreground/5 hover:text-foreground"
+              aria-label="Open in new tab"
+            >
+              <ExternalLink className="h-4 w-4" />
+            </a>
+            <a
+              href={url}
+              download={name}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-foreground/50 transition hover:bg-foreground/5 hover:text-foreground"
+              aria-label="Download"
+            >
+              <Download className="h-4 w-4" />
+            </a>
+            <button
+              onClick={onClose}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-foreground/50 transition hover:bg-foreground/5 hover:text-foreground"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         </div>
-      )}
+        <iframe title={name} src={url} className="clay-inset h-full w-full flex-1 rounded-2xl bg-white" />
+      </div>
     </div>
   );
 }
@@ -483,6 +535,8 @@ function LockGate({ locked, children }: { locked: boolean; children: ReactNode }
   );
 }
 
+// ─── Mentor bio card — now includes the intro video and a real link to the
+// mentor's full public profile page, not just a static name label. ─────────
 function MentorBioCard({ mentorProfile }: { mentorProfile: MentorProfile }) {
   const lockedItems = [
     { icon: Trophy, label: "AIIMS / IIT Rank", value: mentorProfile.aiimsIitRank },
@@ -491,20 +545,32 @@ function MentorBioCard({ mentorProfile }: { mentorProfile: MentorProfile }) {
   ].filter((i) => i.value?.trim());
 
   return (
-    <div className="clay p-5 sm:p-6">
-      <div className="flex items-start gap-4">
-        <div className="clay-inset flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full">
+    <div className="clay p-4 sm:p-6">
+      <div className="flex items-start gap-3 sm:gap-4">
+        <div className="clay-inset flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full sm:h-16 sm:w-16">
           {mentorProfile.profilePictureUrl ? (
             <img src={mentorProfile.profilePictureUrl} alt="" className="h-full w-full object-cover" />
           ) : (
-            <span className="font-display text-xl font-bold text-foreground/50">
+            <span className="font-display text-lg font-bold text-foreground/50 sm:text-xl">
               {mentorProfile.name.charAt(0)}
             </span>
           )}
         </div>
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-wide text-foreground/50">Your Mentor</p>
-          <p className="font-display text-lg font-bold text-foreground">{mentorProfile.name}</p>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground/50 sm:text-xs">
+            Your Mentor
+          </p>
+          <Link
+            to="/mentor-profile/$mentorId"
+            params={{ mentorId: mentorProfile.id }}
+            className="group mt-0.5 inline-flex items-center gap-1.5"
+          >
+            <span className="font-display text-base font-bold text-foreground transition-colors group-hover:text-[var(--sky-deep)] sm:text-lg">
+              {mentorProfile.name}
+            </span>
+            <BadgeCheck className="h-4 w-4 shrink-0 fill-[var(--sky-deep)] text-white" />
+            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-foreground/30 transition-transform group-hover:translate-x-0.5" />
+          </Link>
           {mentorProfile.yearOfStudy && <p className="text-xs text-foreground/50">{mentorProfile.yearOfStudy}</p>}
         </div>
       </div>
@@ -513,6 +579,15 @@ function MentorBioCard({ mentorProfile }: { mentorProfile: MentorProfile }) {
         <p className="mt-4 whitespace-pre-line text-sm leading-relaxed text-foreground/70">
           {mentorProfile.aboutText}
         </p>
+      )}
+
+      {mentorProfile.introVideoUrl && (
+        <div className="mt-4">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-foreground/40">
+            Introduction
+          </p>
+          <VideoPlayer src={mentorProfile.introVideoUrl} />
+        </div>
       )}
 
       {lockedItems.length > 0 && (
@@ -531,6 +606,15 @@ function MentorBioCard({ mentorProfile }: { mentorProfile: MentorProfile }) {
           })}
         </div>
       )}
+
+      <Link
+        to="/mentor-profile/$mentorId"
+        params={{ mentorId: mentorProfile.id }}
+        className="clay-btn-ghost mt-4 flex w-full items-center justify-center gap-2 rounded-full py-2.5 text-xs font-semibold text-foreground/70 transition-transform hover:scale-[1.02]"
+      >
+        View full mentor profile
+        <ChevronRight className="h-3.5 w-3.5" />
+      </Link>
     </div>
   );
 }
@@ -587,11 +671,11 @@ function OverviewTab({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {kind === "mentorship" && mentorProfile && <MentorBioCard mentorProfile={mentorProfile} />}
 
       {kind === "mentorship" && mentorship && (
-        <div className="clay p-5 sm:p-6">
+        <div className="clay p-4 sm:p-6">
           <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-foreground/50">Highlights</p>
           <div className="space-y-1.5">
             {mentorship.highlights.map((h, i) => (
@@ -605,7 +689,7 @@ function OverviewTab({
       )}
 
       {kind === "bundle" && bundle && (
-        <div className="clay p-5 sm:p-6">
+        <div className="clay p-4 sm:p-6">
           <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-foreground/50">What's inside</p>
           <div className="space-y-1.5">
             {bundle.features.map((f, i) => (
@@ -621,31 +705,39 @@ function OverviewTab({
         </div>
       )}
 
-      <div className="clay p-5 sm:p-6">
+      <div className="clay p-4 sm:p-6">
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-foreground/50">FAQs</p>
         <div className="space-y-2">
           {faqs.map((f, i) => (
-            <div key={i} className="clay-inset rounded-2xl px-4 py-3">
+            <div key={i} className="clay-inset overflow-hidden rounded-2xl px-4 py-3">
               <button
                 onClick={() => setOpenFaq(openFaq === i ? null : i)}
                 className="flex w-full items-center justify-between gap-2 text-left"
               >
                 <span className="text-sm font-semibold text-foreground">{f.q}</span>
                 <ChevronDown
-                  className={`h-4 w-4 shrink-0 text-foreground/40 transition-transform ${openFaq === i ? "rotate-180" : ""}`}
+                  className={`h-4 w-4 shrink-0 text-foreground/40 transition-transform duration-300 ${openFaq === i ? "rotate-180" : ""}`}
                 />
               </button>
-              {openFaq === i && <p className="mt-2 text-sm text-foreground/60">{f.a}</p>}
+              <div
+                className={`grid transition-all duration-300 ease-out ${
+                  openFaq === i ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                }`}
+              >
+                <div className="overflow-hidden">
+                  <p className="mt-2 text-sm text-foreground/60">{f.a}</p>
+                </div>
+              </div>
             </div>
           ))}
         </div>
       </div>
 
-      <div className="clay p-5 text-center sm:p-6">
+      <div className="clay p-4 text-center sm:p-6">
         {sent ? (
           <p className="text-sm font-semibold text-foreground">Thanks — we'll call you back shortly.</p>
         ) : showCallbackForm ? (
-          <form onSubmit={handleCallbackSubmit} className="space-y-3 text-left">
+          <form onSubmit={handleCallbackSubmit} className="animate-in fade-in slide-in-from-top-2 space-y-3 text-left duration-200">
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -663,7 +755,7 @@ function OverviewTab({
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Anything specific you'd like to ask about? (optional)"
               rows={2}
-              className="clay-inset w-full rounded-2xl px-4 py-2.5 text-sm text-foreground placeholder:text-foreground/40 focus:outline-none"
+              className="clay-inset w-full resize-none rounded-2xl px-4 py-2.5 text-sm text-foreground placeholder:text-foreground/40 focus:outline-none"
             />
             <button
               type="submit"
@@ -676,7 +768,7 @@ function OverviewTab({
         ) : (
           <button
             onClick={() => setShowCallbackForm(true)}
-            className="clay-btn inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold"
+            className="clay-btn inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition-transform hover:scale-105"
           >
             <PhoneCall className="h-4 w-4" />
             Request a Call Back
@@ -746,13 +838,13 @@ function TestsTab({
 
         return (
           <LockGate key={t.id} locked={!isPurchased}>
-            <div className="clay flex items-center justify-between gap-3 p-5">
-              <div>
-                <p className="font-semibold text-foreground">{t.name}</p>
+            <div className="clay flex flex-col gap-3 p-4 transition-transform hover:-translate-y-0.5 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+              <div className="min-w-0">
+                <p className="truncate font-semibold text-foreground">{t.name}</p>
                 <p className="text-xs text-foreground/50">
                   {t.totalQuestions} questions · {t.timeLimitMinutes} min
                 </p>
-                <p className="mt-1 flex items-center gap-2 text-xs font-semibold">
+                <p className="mt-1 flex flex-wrap items-center gap-2 text-xs font-semibold">
                   {isLive ? (
                     <span className="inline-flex items-center gap-1.5 text-[var(--coral-soft)]">
                       <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" /> LIVE
@@ -771,20 +863,20 @@ function TestsTab({
               </div>
 
               {attempted ? (
-                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                <div className="flex shrink-0 items-center gap-2 sm:flex-col sm:items-end sm:gap-1.5">
                   <button
                     onClick={() => navigate({ to: "/test-analysis/$testId", params: { testId: t.id } })}
                     className="clay-btn flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold"
                   >
                     <BarChart3 className="h-4 w-4" />
-                    View Analysis
+                    Analysis
                   </button>
                   <button
                     disabled={!isPurchased}
                     onClick={() => navigate({ to: "/test/$testId", params: { testId: t.id } })}
                     className="text-[11px] font-semibold text-[var(--sky-deep)] hover:underline disabled:opacity-40"
                   >
-                    Retake test
+                    Retake
                   </button>
                 </div>
               ) : (
@@ -908,14 +1000,14 @@ function SessionsTab({
 
         return (
           <LockGate key={s.id} locked={!isPurchased}>
-            <div className="clay flex items-center justify-between gap-3 p-5">
+            <div className="clay flex flex-col gap-3 p-4 transition-transform hover:-translate-y-0.5 sm:flex-row sm:items-center sm:justify-between sm:p-5">
               <div className="flex items-start gap-3">
-                <div className="clay-inset flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl">
+                <div className="clay-inset flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl sm:h-10 sm:w-10">
                   <Icon className="h-4 w-4 text-foreground/50" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="flex flex-wrap items-center gap-2 font-semibold text-foreground">
-                    {s.track === "AsyncLecture" ? s.lectureTitle : meta.label}
+                    <span className="truncate">{s.track === "AsyncLecture" ? s.lectureTitle : meta.label}</span>
                     {s.status === "cancelled" && (
                       <span className="rounded-full bg-[var(--coral-soft)]/50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
                         Cancelled
@@ -936,7 +1028,7 @@ function SessionsTab({
                 </div>
               </div>
 
-              <div className="flex shrink-0 items-center gap-1.5">
+              <div className="flex shrink-0 items-center gap-1.5 self-end sm:self-auto">
                 {s.status === "scheduled" &&
                   (s.track === "AsyncLecture" ? (
                     <button
@@ -1023,7 +1115,7 @@ function SessionKebabMenu({
     <div className="relative">
       <button
         onClick={handleOpen}
-        className="flex h-9 w-9 items-center justify-center rounded-full text-foreground/50 hover:bg-foreground/5"
+        className="flex h-9 w-9 items-center justify-center rounded-full text-foreground/50 transition hover:bg-foreground/5"
         aria-label="Review this session"
       >
         <MoreVertical className="h-4 w-4" />
@@ -1032,7 +1124,7 @@ function SessionKebabMenu({
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="clay absolute right-0 top-full z-20 mt-2 w-64 p-4">
+          <div className="clay animate-in fade-in zoom-in-95 absolute right-0 top-full z-20 mt-2 w-64 p-4 duration-150">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground/50">
               Rate this session
             </p>
@@ -1058,8 +1150,8 @@ function SessionKebabMenu({
   );
 }
 
-// ─── Assets tab — now handles BOTH bundle syllabus/planner docs AND
-// mentorship batch notes uploaded through the mentor's watermark gate ──────
+// ─── Assets tab — both bundle syllabus/planner docs AND mentorship batch
+// notes; opens via the redesigned in-page PDF modal, no Google redirect ────
 function AssetsTab({
   kind,
   bundle,
@@ -1073,7 +1165,7 @@ function AssetsTab({
   batchId: string;
   isPurchased: boolean;
   user: { getIdToken: () => Promise<string> };
-  onOpenPdf: (url: string) => void;
+  onOpenPdf: (url: string, name: string) => void;
 }) {
   const [notes, setNotes] = useState<NoteRow[] | null>(null);
 
@@ -1108,8 +1200,8 @@ function AssetsTab({
           <LockGate key={n.id} locked={!isPurchased}>
             <button
               disabled={!isPurchased}
-              onClick={() => onOpenPdf(n.fileUrl)}
-              className="clay flex w-full items-center gap-3 p-4 text-left disabled:cursor-not-allowed"
+              onClick={() => onOpenPdf(n.fileUrl, n.fileName)}
+              className="clay flex w-full items-center gap-3 p-4 text-left transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:hover:translate-y-0"
             >
               <div className="clay-inset flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
                 <FileText className="h-4 w-4 text-foreground/50" />
@@ -1150,15 +1242,15 @@ function AssetsTab({
         <LockGate key={i} locked={!isPurchased}>
           <button
             disabled={!isPurchased}
-            onClick={() => onOpenPdf(a.url)}
-            className="clay flex w-full items-center gap-3 p-4 text-left disabled:cursor-not-allowed"
+            onClick={() => onOpenPdf(a.url, a.label)}
+            className="clay flex w-full items-center gap-3 p-4 text-left transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:hover:translate-y-0"
           >
             <div className="clay-inset flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
               <FileText className="h-4 w-4 text-foreground/50" />
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-foreground">{a.label}</p>
-              <p className="truncate text-xs text-foreground/40">{a.url}</p>
+              <p className="truncate text-xs text-foreground/40">Tap to view</p>
             </div>
           </button>
         </LockGate>
@@ -1189,9 +1281,9 @@ function AnnouncementsTab({
     <div className="space-y-3">
       {announcements.map((a) => (
         <LockGate key={a.id} locked={!isPurchased}>
-          <div className="clay flex gap-3 p-4">
+          <div className="clay flex gap-3 p-4 transition-transform hover:-translate-y-0.5">
             {a.thumbnailUrl && <img src={a.thumbnailUrl} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover" />}
-            <div>
+            <div className="min-w-0">
               {a.title && <p className="text-sm font-semibold text-foreground">{a.title}</p>}
               {a.message && <p className="text-sm text-foreground/80">{a.message}</p>}
               <p className="mt-1 text-xs text-foreground/40">
@@ -1299,24 +1391,32 @@ function ChatTab({
   }
 
   return (
-    <div className="clay flex h-[32rem] flex-col overflow-hidden">
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-foreground/10 px-5 py-4">
-        <div className="flex items-center gap-2">
-          <MessageSquare className="h-4 w-4 text-foreground/60" />
-          <p className="text-sm font-semibold text-foreground">Chat with {mentorName}</p>
-        </div>
+    <div className="clay flex h-[28rem] flex-col overflow-hidden sm:h-[32rem]">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-foreground/10 px-4 py-3.5 sm:px-5 sm:py-4">
+        <Link
+          to="/mentor-profile/$mentorId"
+          params={{ mentorId }}
+          className="group flex min-w-0 items-center gap-2"
+        >
+          <MessageSquare className="h-4 w-4 shrink-0 text-foreground/60" />
+          <p className="truncate text-sm font-semibold text-foreground group-hover:text-[var(--sky-deep)]">
+            Chat with {mentorName}
+          </p>
+        </Link>
         {lockStatus && (
           <span
-            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wide ${
               lockStatus.isLockedNow ? "bg-[var(--coral-soft)]/50 text-foreground" : "bg-[var(--mint-soft)]/60 text-foreground"
             }`}
           >
             {lockStatus.isLockedNow ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
-            {lockStatus.isLockedNow
-              ? `Locked · opens ${lockStatus.openFrom}`
-              : lockStatus.openFrom
-                ? `Open until ${lockStatus.openUntil}`
-                : "Open"}
+            <span className="hidden sm:inline">
+              {lockStatus.isLockedNow
+                ? `Locked · opens ${lockStatus.openFrom}`
+                : lockStatus.openFrom
+                  ? `Open until ${lockStatus.openUntil}`
+                  : "Open"}
+            </span>
           </span>
         )}
       </div>
@@ -1332,7 +1432,7 @@ function ChatTab({
           messages.map((m) => (
             <div key={m.id} className={`flex ${m.sender === "student" ? "justify-end" : "justify-start"}`}>
               <div
-                className={`max-w-[75%] rounded-2xl px-3.5 py-2 text-sm ${
+                className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm sm:max-w-[75%] ${
                   m.sender === "student" ? "clay-btn text-white" : "clay-inset text-foreground"
                 }`}
               >
@@ -1362,7 +1462,7 @@ function ChatTab({
           <button
             type="submit"
             disabled={sending || !draft.trim() || lockStatus?.isLockedNow}
-            className="clay-btn flex h-10 w-10 shrink-0 items-center justify-center rounded-full disabled:opacity-70"
+            className="clay-btn flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-transform hover:scale-105 disabled:opacity-70 disabled:hover:scale-100"
             aria-label="Send"
           >
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -1407,7 +1507,7 @@ function HelpTab({
 
   return (
     <LockGate locked={!isPurchased}>
-      <div className="clay p-5 sm:p-6">
+      <div className="clay p-4 sm:p-6">
         <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-foreground/50">
           Raise a ticket for this batch
         </p>
@@ -1430,7 +1530,7 @@ function HelpTab({
               placeholder="Describe your issue or question…"
               rows={4}
               disabled={!isPurchased}
-              className="clay-inset w-full rounded-2xl px-4 py-2.5 text-sm text-foreground placeholder:text-foreground/40 focus:outline-none disabled:opacity-50"
+              className="clay-inset w-full resize-none rounded-2xl px-4 py-2.5 text-sm text-foreground placeholder:text-foreground/40 focus:outline-none disabled:opacity-50"
             />
             <button
               type="submit"
