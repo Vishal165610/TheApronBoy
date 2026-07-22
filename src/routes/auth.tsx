@@ -1,6 +1,23 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, KeyRound, Loader2, Mail, Lock, User, Phone, MapPin, GraduationCap, Target, Sparkles } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Loader2,
+  Mail,
+  Lock,
+  User,
+  Phone,
+  MapPin,
+  GraduationCap,
+  Target,
+  Sparkles,
+  ShieldCheck,
+} from "lucide-react";
 import type { User as FirebaseUser } from "firebase/auth";
 import { auth, firebaseSignIn, firebaseSignUp, googleAuth } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
@@ -59,10 +76,6 @@ function AuthPage() {
   const [pendingEmail, setPendingEmail] = useState("");
   const navigate = useNavigate();
 
-  // Already-logged-in users shouldn't see the sign-in form at all. If it's a
-  // password account that's never verified its email, send them to the
-  // verification screen first — Google accounts skip this since Google
-  // already verifies emails on its end.
   useEffect(() => {
     if (loading) return;
 
@@ -122,7 +135,6 @@ function AuthPage() {
 
   return (
     <div className="relative min-h-screen overflow-hidden">
-      {/* soft ambient background blobs */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute -top-32 -left-20 h-96 w-96 rounded-full bg-[var(--sky-soft)] opacity-70 blur-3xl" />
         <div className="absolute top-1/3 -right-24 h-[28rem] w-[28rem] rounded-full bg-[var(--teal-soft)] opacity-70 blur-3xl" />
@@ -130,19 +142,17 @@ function AuthPage() {
       </div>
 
       <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col items-center justify-center px-4 py-8 sm:px-6 sm:py-12">
-        {/* Back link */}
         <div className="mb-6 w-full max-w-xl">
           <Link
             to="/"
-            className="clay-chip inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-foreground/80 transition hover:text-foreground"
+            className="clay-chip group inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-foreground/80 transition hover:text-foreground"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
             Back to home
           </Link>
         </div>
 
-        {/* Logo */}
-        <div className="mb-6 flex flex-col items-center gap-3">
+        <div className="animate-in fade-in zoom-in-95 mb-6 flex flex-col items-center gap-3 duration-500">
           <div className="clay flex h-12 w-auto items-center justify-center p-2 sm:h-14">
             <img
               src="https://i.postimg.cc/4NvD69v0/image-removebg-preview.png"
@@ -158,8 +168,9 @@ function AuthPage() {
           </p>
         </div>
 
-        {/* Main card */}
-        <div className="clay w-full max-w-xl p-5 sm:p-8">
+        {/* Main card — key={stage} forces a remount so each stage change
+            plays its own fade/slide-in rather than snapping instantly. */}
+        <div key={stage} className="clay animate-in fade-in slide-in-from-bottom-3 w-full max-w-xl p-5 duration-300 sm:p-8">
           {stage === "auth" && (
             <AuthCard
               tab={tab}
@@ -204,7 +215,6 @@ function AuthCard({
 }) {
   return (
     <div>
-      {/* Heading */}
       <div className="mb-6 text-center">
         <h1 className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
           {tab === "signin" ? "Welcome back" : "Create your account"}
@@ -216,17 +226,18 @@ function AuthCard({
         </p>
       </div>
 
-      {/* Tab toggle */}
-      <div className="clay-inset mx-auto mb-6 grid max-w-sm grid-cols-2 gap-1 p-1">
+      <div className="clay-inset relative mx-auto mb-6 grid max-w-sm grid-cols-2 gap-1 p-1">
         <TabButton active={tab === "signin"} onClick={() => setTab("signin")}>Sign In</TabButton>
         <TabButton active={tab === "signup"} onClick={() => setTab("signup")}>Create Account</TabButton>
       </div>
 
-      {tab === "signin" ? (
-        <SignInForm onSignedIn={onSignedIn} onSignedUp={onSignedUp} onNeedsVerification={onNeedsVerification} />
-      ) : (
-        <SignUpForm onSignedIn={onSignedIn} onSignedUp={onSignedUp} onNeedsVerification={onNeedsVerification} />
-      )}
+      <div key={tab} className="animate-in fade-in duration-200">
+        {tab === "signin" ? (
+          <SignInForm onSignedIn={onSignedIn} onSignedUp={onSignedUp} onNeedsVerification={onNeedsVerification} />
+        ) : (
+          <SignUpForm onSignedIn={onSignedIn} onSignedUp={onSignedUp} onNeedsVerification={onNeedsVerification} />
+        )}
+      </div>
     </div>
   );
 }
@@ -237,10 +248,8 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
       type="button"
       onClick={onClick}
       className={
-        "rounded-full py-2.5 text-sm font-semibold transition-all " +
-        (active
-          ? "clay-btn text-white"
-          : "text-foreground/70 hover:text-foreground")
+        "relative rounded-full py-2.5 text-sm font-semibold transition-all duration-200 " +
+        (active ? "clay-btn text-white" : "text-foreground/70 hover:text-foreground")
       }
     >
       {children}
@@ -254,12 +263,12 @@ function GoogleButton({ onClick, loading, label }: { onClick: () => void; loadin
       type="button"
       onClick={onClick}
       disabled={loading}
-      className="clay-btn-ghost group flex w-full items-center justify-center gap-3 px-5 py-3.5 text-sm font-semibold text-foreground disabled:opacity-70"
+      className="clay-btn-ghost group flex w-full items-center justify-center gap-3 px-5 py-3.5 text-sm font-semibold text-foreground transition-transform hover:scale-[1.01] disabled:opacity-70 disabled:hover:scale-100"
     >
       {loading ? (
         <Loader2 className="h-5 w-5 animate-spin" />
       ) : (
-        <GoogleIcon className="h-5 w-5" />
+        <GoogleIcon className="h-5 w-5 transition-transform group-hover:scale-110" />
       )}
       <span>{label}</span>
     </button>
@@ -292,7 +301,7 @@ function ClayInput({
   ...props
 }: React.InputHTMLAttributes<HTMLInputElement> & { icon?: ReactNode }) {
   return (
-    <div className="clay-inset flex items-center gap-3 px-4 py-3 transition focus-within:ring-2 focus-within:ring-[var(--sky-deep)]/40">
+    <div className="clay-inset flex items-center gap-3 px-4 py-3 transition-shadow duration-200 focus-within:ring-2 focus-within:ring-[var(--sky-deep)]/40">
       {icon && <span className="text-foreground/50">{icon}</span>}
       <input
         {...props}
@@ -308,7 +317,7 @@ function ClaySelect({
   ...props
 }: React.SelectHTMLAttributes<HTMLSelectElement> & { icon?: ReactNode }) {
   return (
-    <div className="clay-inset flex items-center gap-3 px-4 py-3 focus-within:ring-2 focus-within:ring-[var(--sky-deep)]/40">
+    <div className="clay-inset flex items-center gap-3 px-4 py-3 transition-shadow duration-200 focus-within:ring-2 focus-within:ring-[var(--sky-deep)]/40">
       {icon && <span className="text-foreground/50">{icon}</span>}
       <select
         {...props}
@@ -342,6 +351,23 @@ function friendlyAuthError(err: unknown): string {
   }
 }
 
+// Lightweight, purely-visual strength hint for signup — never blocks
+// submission (Firebase's own 8-char minimum is still the real gate), just
+// nudges toward a stronger password with an immediate, smooth indicator.
+function passwordStrength(pw: string): { label: string; color: string; fill: number } {
+  if (!pw) return { label: "", color: "", fill: 0 };
+  let score = 0;
+  if (pw.length >= 8) score++;
+  if (pw.length >= 12) score++;
+  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score++;
+  if (/\d/.test(pw)) score++;
+  if (/[^A-Za-z0-9]/.test(pw)) score++;
+
+  if (score <= 1) return { label: "Weak", color: "bg-[var(--coral-soft)]", fill: 25 };
+  if (score <= 3) return { label: "Fair", color: "bg-[var(--lemon-soft)]", fill: 60 };
+  return { label: "Strong", color: "bg-[var(--mint-soft)]", fill: 100 };
+}
+
 function SignInForm({
   onSignedIn,
   onSignedUp,
@@ -371,8 +397,6 @@ function SignInForm({
       const user = auth.currentUser!;
       await user.reload();
 
-      // Block unverified password accounts here — send a fresh code and
-      // route to the verification screen instead of the dashboard.
       if (!user.emailVerified) {
         const token = await user.getIdToken();
         await sendEmailVerificationOtp({ data: { token } });
@@ -419,7 +443,7 @@ function SignInForm({
           onChange={(e) => setEmail(e.target.value)}
           required
         />
-        <div className="clay-inset flex items-center gap-3 px-4 py-3 focus-within:ring-2 focus-within:ring-[var(--sky-deep)]/40">
+        <div className="clay-inset flex items-center gap-3 px-4 py-3 transition-shadow duration-200 focus-within:ring-2 focus-within:ring-[var(--sky-deep)]/40">
           <Lock className="h-4 w-4 text-foreground/50" />
           <input
             type={show ? "text" : "password"}
@@ -433,7 +457,7 @@ function SignInForm({
           <button
             type="button"
             onClick={() => setShow((s) => !s)}
-            className="text-foreground/50 hover:text-foreground"
+            className="text-foreground/50 transition-colors hover:text-foreground"
             aria-label={show ? "Hide password" : "Show password"}
           >
             {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -448,7 +472,7 @@ function SignInForm({
       </div>
 
       {error && (
-        <p className="rounded-2xl bg-[var(--coral-soft)]/50 px-4 py-2 text-xs font-medium text-foreground">
+        <p className="animate-in fade-in slide-in-from-top-1 rounded-2xl bg-[var(--coral-soft)]/50 px-4 py-2 text-xs font-medium text-foreground duration-200">
           {error}
         </p>
       )}
@@ -456,7 +480,7 @@ function SignInForm({
       <button
         type="submit"
         disabled={loading}
-        className="clay-btn flex w-full items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold disabled:opacity-70"
+        className="clay-btn flex w-full items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold transition-transform hover:scale-[1.01] disabled:opacity-70 disabled:hover:scale-100"
       >
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <><span>Login to Dashboard</span><ArrowRight className="h-4 w-4" /></>}
       </button>
@@ -480,6 +504,8 @@ function SignUpForm({
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const strength = passwordStrength(password);
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -491,10 +517,6 @@ function SignUpForm({
       const user = auth.currentUser!;
       const token = await user.getIdToken();
 
-      // Create the Mongo profile placeholder now, but hold off on
-      // recordSession/getProfile until after verification — that way we
-      // don't register a "logged in device" for an account that can't
-      // actually use the dashboard yet.
       await ensureUserRecord({ data: { token, provider: "password" } });
       await sendEmailVerificationOtp({ data: { token } });
 
@@ -536,31 +558,54 @@ function SignUpForm({
           onChange={(e) => setEmail(e.target.value)}
           required
         />
-        <div className="clay-inset flex items-center gap-3 px-4 py-3 focus-within:ring-2 focus-within:ring-[var(--sky-deep)]/40">
-          <Lock className="h-4 w-4 text-foreground/50" />
-          <input
-            type={show ? "text" : "password"}
-            autoComplete="new-password"
-            placeholder="Create a password (min. 8 chars)"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={8}
-            className="w-full bg-transparent text-sm text-foreground placeholder:text-foreground/40 focus:outline-none"
-          />
-          <button
-            type="button"
-            onClick={() => setShow((s) => !s)}
-            className="text-foreground/50 hover:text-foreground"
-            aria-label={show ? "Hide password" : "Show password"}
+        <div>
+          <div className="clay-inset flex items-center gap-3 px-4 py-3 transition-shadow duration-200 focus-within:ring-2 focus-within:ring-[var(--sky-deep)]/40">
+            <Lock className="h-4 w-4 text-foreground/50" />
+            <input
+              type={show ? "text" : "password"}
+              autoComplete="new-password"
+              placeholder="Create a password (min. 8 chars)"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={8}
+              className="w-full bg-transparent text-sm text-foreground placeholder:text-foreground/40 focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => setShow((s) => !s)}
+              className="text-foreground/50 transition-colors hover:text-foreground"
+              aria-label={show ? "Hide password" : "Show password"}
+            >
+              {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+
+          {/* Strength meter — fades/grows in only once typing starts */}
+          <div
+            className={`grid transition-all duration-300 ease-out ${
+              password ? "mt-2 grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+            }`}
           >
-            {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          </button>
+            <div className="overflow-hidden">
+              <div className="flex items-center gap-2 px-1">
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-foreground/10">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${strength.color}`}
+                    style={{ width: `${strength.fill}%` }}
+                  />
+                </div>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-foreground/50">
+                  {strength.label}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
       {error && (
-        <p className="rounded-2xl bg-[var(--coral-soft)]/50 px-4 py-2 text-xs font-medium text-foreground">
+        <p className="animate-in fade-in slide-in-from-top-1 rounded-2xl bg-[var(--coral-soft)]/50 px-4 py-2 text-xs font-medium text-foreground duration-200">
           {error}
         </p>
       )}
@@ -568,7 +613,7 @@ function SignUpForm({
       <button
         type="submit"
         disabled={loading}
-        className="clay-btn flex w-full items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold disabled:opacity-70"
+        className="clay-btn flex w-full items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold transition-transform hover:scale-[1.01] disabled:opacity-70 disabled:hover:scale-100"
       >
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <><span>Continue</span><ArrowRight className="h-4 w-4" /></>}
       </button>
@@ -582,6 +627,7 @@ function EmailVerificationCard({ email, onVerified }: { email: string; onVerifie
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [shake, setShake] = useState(false);
   const [cooldown, setCooldown] = useState(60);
 
   useEffect(() => {
@@ -590,20 +636,34 @@ function EmailVerificationCard({ email, onVerified }: { email: string; onVerifie
     return () => clearInterval(id);
   }, [cooldown]);
 
+  function triggerShake() {
+    setShake(true);
+    setTimeout(() => setShake(false), 400);
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!/^\d{6}$/.test(code)) return setError("Enter the 6-digit code.");
+    if (!/^\d{6}$/.test(code)) {
+      setError("Enter the 6-digit code.");
+      triggerShake();
+      return;
+    }
     setLoading(true);
     try {
       const user = auth.currentUser;
       if (!user) return setError("Your session expired. Please sign in again.");
       const token = await user.getIdToken();
       const res = await verifyEmailVerificationOtp({ data: { token, code } });
-      if (!res.ok) return setError(res.error ?? "Incorrect code.");
+      if (!res.ok) {
+        setError(res.error ?? "Incorrect code.");
+        triggerShake();
+        return;
+      }
       onVerified();
     } catch {
       setError("Something went wrong. Please try again.");
+      triggerShake();
     } finally {
       setLoading(false);
     }
@@ -629,30 +689,39 @@ function EmailVerificationCard({ email, onVerified }: { email: string; onVerifie
   return (
     <form onSubmit={handleSubmit} className="space-y-4" noValidate>
       <div className="mb-2 text-center">
+        <div className="clay-inset mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full">
+          <ShieldCheck className="h-5 w-5 text-[var(--sky-deep)]" />
+        </div>
         <h1 className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
           Verify your email
         </h1>
         <p className="mt-1 text-sm text-foreground/60">
-          We sent a 6-digit code to {email}. Enter it below to activate your account.
+          We sent a 6-digit code to <span className="font-medium text-foreground">{email}</span>. Enter it below to
+          activate your account.
         </p>
       </div>
 
-      <div className="clay-inset flex items-center gap-3 px-4 py-3 focus-within:ring-2 focus-within:ring-[var(--sky-deep)]/40">
-        <KeyRound className="h-4 w-4 text-foreground/50" />
+      <div
+        className={`clay-inset flex items-center gap-3 px-4 py-3.5 transition-shadow duration-200 focus-within:ring-2 focus-within:ring-[var(--sky-deep)]/40 ${
+          shake ? "animate-shake" : ""
+        }`}
+      >
+        <KeyRound className="h-4 w-4 shrink-0 text-foreground/50" />
         <input
           inputMode="numeric"
-          placeholder="6-digit code"
+          placeholder="000000"
           value={code}
           onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
           maxLength={6}
           required
-          style={{ letterSpacing: "0.3em", fontWeight: 600, textAlign: "center" }}
-          className="w-full bg-transparent text-sm text-foreground placeholder:text-foreground/40 focus:outline-none"
+          autoFocus
+          style={{ letterSpacing: "0.5em", fontWeight: 700, textAlign: "center" }}
+          className="w-full bg-transparent text-lg text-foreground placeholder:text-foreground/20 focus:outline-none"
         />
       </div>
 
       {error && (
-        <p className="rounded-2xl bg-[var(--coral-soft)]/50 px-4 py-2 text-xs font-medium text-foreground">
+        <p className="animate-in fade-in slide-in-from-top-1 rounded-2xl bg-[var(--coral-soft)]/50 px-4 py-2 text-xs font-medium text-foreground duration-200">
           {error}
         </p>
       )}
@@ -660,7 +729,7 @@ function EmailVerificationCard({ email, onVerified }: { email: string; onVerifie
       <button
         type="submit"
         disabled={loading}
-        className="clay-btn flex w-full items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold disabled:opacity-70"
+        className="clay-btn flex w-full items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold transition-transform hover:scale-[1.01] disabled:opacity-70 disabled:hover:scale-100"
       >
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <><span>Verify & continue</span><ArrowRight className="h-4 w-4" /></>}
       </button>
@@ -670,7 +739,7 @@ function EmailVerificationCard({ email, onVerified }: { email: string; onVerifie
           type="button"
           onClick={handleResend}
           disabled={cooldown > 0 || resending}
-          className="font-semibold text-[var(--sky-deep)] hover:underline disabled:text-foreground/40 disabled:no-underline"
+          className="font-semibold text-[var(--sky-deep)] transition-colors hover:underline disabled:text-foreground/40 disabled:no-underline"
         >
           {resending ? "Sending..." : cooldown > 0 ? `Resend in ${cooldown}s` : "Resend code"}
         </button>
@@ -679,8 +748,14 @@ function EmailVerificationCard({ email, onVerified }: { email: string; onVerifie
   );
 }
 
-// ─── Onboarding ──────────────────────────────────────────────────────────────
+// ─── Onboarding — now a 3-step wizard instead of one long form ─────────────
+// Splitting Personal / Academic / Target into separate steps with a progress
+// bar keeps each screen short, which matters a lot on small devices where
+// the old all-at-once form felt cramped and overwhelming.
+const ONBOARDING_STEPS = ["Personal", "Academic", "Target"] as const;
+
 function OnboardingCard({ onComplete }: { onComplete: () => void }) {
+  const [step, setStep] = useState(0);
   const [profile, setProfile] = useState<OnboardingProfile>({
     fullName: "",
     mobile: "",
@@ -697,15 +772,38 @@ function OnboardingCard({ onComplete }: { onComplete: () => void }) {
     setProfile((p) => ({ ...p, [k]: v }));
   }
 
+  function validateStep(s: number): string | null {
+    if (s === 0) {
+      if (!profile.fullName.trim()) return "Please enter your full name.";
+      if (!/^\d{10}$/.test(profile.mobile)) return "Enter a valid 10-digit mobile number.";
+      if (!profile.city.trim()) return "Please enter your city or town.";
+    }
+    if (s === 1) {
+      if (!profile.currentClass) return "Select your current class.";
+      if (!profile.board) return "Select your board.";
+    }
+    if (s === 2) {
+      if (!profile.track) return "Pick your track.";
+    }
+    return null;
+  }
+
+  function handleNext() {
+    const err = validateStep(step);
+    if (err) return setError(err);
+    setError(null);
+    setStep((s) => Math.min(s + 1, ONBOARDING_STEPS.length - 1));
+  }
+
+  function handleBack() {
+    setError(null);
+    setStep((s) => Math.max(s - 1, 0));
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setError(null);
-    if (!profile.fullName.trim()) return setError("Please enter your full name.");
-    if (!/^\d{10}$/.test(profile.mobile)) return setError("Enter a valid 10-digit mobile number.");
-    if (!profile.city.trim()) return setError("Please enter your city or town.");
-    if (!profile.currentClass) return setError("Select your current class.");
-    if (!profile.board) return setError("Select your board.");
-    if (!profile.track) return setError("Pick your track.");
+    const err = validateStep(2);
+    if (err) return setError(err);
 
     const user = auth.currentUser;
     if (!user) {
@@ -713,6 +811,7 @@ function OnboardingCard({ onComplete }: { onComplete: () => void }) {
       return;
     }
 
+    setError(null);
     setLoading(true);
     try {
       const token = await user.getIdToken();
@@ -740,112 +839,171 @@ function OnboardingCard({ onComplete }: { onComplete: () => void }) {
         </p>
       </div>
 
-      {/* Personal coordinates */}
-      <Section title="Personal">
-        <ClayInput
-          icon={<User className="h-4 w-4" />}
-          placeholder="Full name"
-          value={profile.fullName}
-          onChange={(e) => set("fullName", e.target.value)}
-          autoComplete="name"
-          required
-        />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <ClayInput
-            icon={<Phone className="h-4 w-4" />}
-            type="tel"
-            inputMode="numeric"
-            placeholder="Mobile (10 digits)"
-            value={profile.mobile}
-            onChange={(e) => set("mobile", e.target.value.replace(/\D/g, "").slice(0, 10))}
-            required
-          />
-          <ClayInput
-            icon={<MapPin className="h-4 w-4" />}
-            placeholder="City / Town / Village"
-            value={profile.city}
-            onChange={(e) => set("city", e.target.value)}
-            autoComplete="address-level2"
-            required
-          />
+      {/* Step progress */}
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          {ONBOARDING_STEPS.map((label, i) => (
+            <div key={label} className="flex flex-1 items-center">
+              <div
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-all duration-300 ${
+                  i < step
+                    ? "bg-[var(--sky-deep)] text-white"
+                    : i === step
+                      ? "clay-btn text-white"
+                      : "clay-inset text-foreground/40"
+                }`}
+              >
+                {i < step ? <Check className="h-3.5 w-3.5" /> : i + 1}
+              </div>
+              {i < ONBOARDING_STEPS.length - 1 && (
+                <div className="mx-1.5 h-0.5 flex-1 overflow-hidden rounded-full bg-foreground/10">
+                  <div
+                    className="h-full rounded-full bg-[var(--sky-deep)] transition-all duration-500 ease-out"
+                    style={{ width: i < step ? "100%" : "0%" }}
+                  />
+                </div>
+              )}
+            </div>
+          ))}
         </div>
-      </Section>
-
-      {/* Academic */}
-      <Section title="Academic">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <ClaySelect
-            icon={<GraduationCap className="h-4 w-4" />}
-            value={profile.currentClass}
-            onChange={(e) => set("currentClass", e.target.value)}
-            required
-          >
-            <option value="">Current class</option>
-            <option>Class 11</option>
-            <option>Class 12</option>
-            <option>Dropper</option>
-          </ClaySelect>
-          <ClaySelect
-            icon={<GraduationCap className="h-4 w-4" />}
-            value={profile.board}
-            onChange={(e) => set("board", e.target.value)}
-            required
-          >
-            <option value="">Board / State board</option>
-            <option>CBSE</option>
-            <option>ICSE</option>
-            <option>Maharashtra</option>
-            <option>Karnataka</option>
-            <option>Tamil Nadu</option>
-            <option>Uttar Pradesh</option>
-            <option>West Bengal</option>
-            <option>Other</option>
-          </ClaySelect>
+        <div className="flex justify-between text-[10px] font-semibold uppercase tracking-wide text-foreground/40">
+          {ONBOARDING_STEPS.map((label) => (
+            <span key={label}>{label}</span>
+          ))}
         </div>
-      </Section>
+      </div>
 
-      {/* Target */}
-      <Section title="Target">
-        <ClaySelect
-          icon={<Target className="h-4 w-4" />}
-          value={profile.targetExam}
-          onChange={(e) => set("targetExam", e.target.value)}
-        >
-          <option>NEET</option>
-          <option>NEET + AIIMS</option>
-          <option>NEET PG (future)</option>
-        </ClaySelect>
-
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-foreground/60">
-            I am a
-          </p>
-          <div className="grid grid-cols-3 gap-2 sm:gap-3">
-            {(["Dropper", "11th", "12th"] as const).map((t) => (
-              <TrackChip
-                key={t}
-                active={profile.track === t}
-                onClick={() => set("track", t)}
-                label={t}
+      {/* Step content — remounts + animates on every step change */}
+      <div key={step} className="animate-in fade-in slide-in-from-right-2 min-h-[13rem] duration-250">
+        {step === 0 && (
+          <Section title="Personal">
+            <ClayInput
+              icon={<User className="h-4 w-4" />}
+              placeholder="Full name"
+              value={profile.fullName}
+              onChange={(e) => set("fullName", e.target.value)}
+              autoComplete="name"
+              required
+            />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <ClayInput
+                icon={<Phone className="h-4 w-4" />}
+                type="tel"
+                inputMode="numeric"
+                placeholder="Mobile (10 digits)"
+                value={profile.mobile}
+                onChange={(e) => set("mobile", e.target.value.replace(/\D/g, "").slice(0, 10))}
+                required
               />
-            ))}
-          </div>
-        </div>
-      </Section>
+              <ClayInput
+                icon={<MapPin className="h-4 w-4" />}
+                placeholder="City / Town / Village"
+                value={profile.city}
+                onChange={(e) => set("city", e.target.value)}
+                autoComplete="address-level2"
+                required
+              />
+            </div>
+          </Section>
+        )}
+
+        {step === 1 && (
+          <Section title="Academic">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <ClaySelect
+                icon={<GraduationCap className="h-4 w-4" />}
+                value={profile.currentClass}
+                onChange={(e) => set("currentClass", e.target.value)}
+                required
+              >
+                <option value="">Current class</option>
+                <option>Class 11</option>
+                <option>Class 12</option>
+                <option>Dropper</option>
+              </ClaySelect>
+              <ClaySelect
+                icon={<GraduationCap className="h-4 w-4" />}
+                value={profile.board}
+                onChange={(e) => set("board", e.target.value)}
+                required
+              >
+                <option value="">Board / State board</option>
+                <option>CBSE</option>
+                <option>ICSE</option>
+                <option>Maharashtra</option>
+                <option>Karnataka</option>
+                <option>Tamil Nadu</option>
+                <option>Uttar Pradesh</option>
+                <option>West Bengal</option>
+                <option>Other</option>
+              </ClaySelect>
+            </div>
+          </Section>
+        )}
+
+        {step === 2 && (
+          <Section title="Target">
+            <ClaySelect
+              icon={<Target className="h-4 w-4" />}
+              value={profile.targetExam}
+              onChange={(e) => set("targetExam", e.target.value)}
+            >
+              <option>NEET</option>
+              <option>NEET + AIIMS</option>
+              <option>NEET PG (future)</option>
+            </ClaySelect>
+
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-foreground/60">
+                I am a
+              </p>
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                {(["Dropper", "11th", "12th"] as const).map((t) => (
+                  <TrackChip key={t} active={profile.track === t} onClick={() => set("track", t)} label={t} />
+                ))}
+              </div>
+            </div>
+          </Section>
+        )}
+      </div>
 
       {error && (
-        <p className="rounded-2xl bg-[var(--coral-soft)]/50 px-4 py-2 text-xs font-medium text-foreground">
+        <p className="animate-in fade-in slide-in-from-top-1 rounded-2xl bg-[var(--coral-soft)]/50 px-4 py-2 text-xs font-medium text-foreground duration-200">
           {error}
         </p>
       )}
 
-      <button
-        type="submit"
-        disabled={loading}
-        className="clay-btn flex w-full items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold disabled:opacity-70"
-      >
-        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <><span>Finish & Enter Dashboard</span><ArrowRight className="h-4 w-4" /></>}
-      </button>
+      <div className="flex items-center gap-3">
+        {step > 0 && (
+          <button
+            type="button"
+            onClick={handleBack}
+            className="clay-btn-ghost flex items-center gap-2 rounded-full px-5 py-3.5 text-sm font-semibold text-foreground/70 transition-transform hover:scale-[1.02]"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </button>
+        )}
+
+        {step < ONBOARDING_STEPS.length - 1 ? (
+          <button
+            type="button"
+            onClick={handleNext}
+            className="clay-btn flex flex-1 items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold transition-transform hover:scale-[1.01]"
+          >
+            <span>Continue</span>
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={loading}
+            className="clay-btn flex flex-1 items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold transition-transform hover:scale-[1.01] disabled:opacity-70 disabled:hover:scale-100"
+          >
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <><span>Finish & Enter Dashboard</span><ArrowRight className="h-4 w-4" /></>}
+          </button>
+        )}
+      </div>
     </form>
   );
 }
@@ -865,8 +1023,8 @@ function TrackChip({ active, onClick, label }: { active: boolean; onClick: () =>
       type="button"
       onClick={onClick}
       className={
-        "relative flex items-center justify-center gap-2 rounded-full px-3 py-3 text-sm font-semibold transition-all " +
-        (active ? "clay-btn text-white" : "clay-btn-ghost text-foreground/80")
+        "relative flex items-center justify-center gap-2 rounded-full px-3 py-3 text-sm font-semibold transition-all duration-200 " +
+        (active ? "clay-btn scale-[1.02] text-white" : "clay-btn-ghost text-foreground/80 hover:scale-[1.02]")
       }
     >
       {active && <Check className="h-4 w-4" />}
