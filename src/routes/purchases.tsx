@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Loader2, BookOpen, Users2, ArrowRight } from "lucide-react";
+import { Loader2, BookOpen, Users2, ArrowRight, CalendarDays, PackageOpen } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { getMyPurchases } from "@/server-functions/student-data";
 import { AppHeader } from "@/components/app-header";
@@ -20,10 +20,28 @@ type Purchase = {
   purchasedAt: string | null;
 };
 
+type Filter = "all" | "bundle" | "mentorship";
+
+const currency = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  maximumFractionDigits: 0,
+});
+
+function formatDate(iso: string | null) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 function PurchasesPage() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const [purchases, setPurchases] = useState<Purchase[] | null>(null);
+  const [filter, setFilter] = useState<Filter>("all");
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
@@ -46,6 +64,10 @@ function PurchasesPage() {
     );
   }
 
+  const bundleCount = purchases?.filter((p) => p.itemType === "bundle").length ?? 0;
+  const mentorshipCount = purchases?.filter((p) => p.itemType === "mentorship").length ?? 0;
+  const filtered = (purchases ?? []).filter((p) => filter === "all" || p.itemType === filter);
+
   return (
     <div className="relative min-h-screen overflow-hidden">
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
@@ -56,65 +78,128 @@ function PurchasesPage() {
       <AppHeader user={user} />
 
       <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
-        <div className="mb-8">
-          <h1 className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-            My Purchases
-          </h1>
-          <p className="mt-1 text-sm text-foreground/60">
-            Every test series and mentorship batch you've bought, in one place.
-          </p>
+        <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+              My Purchases
+            </h1>
+            <p className="mt-1 text-sm text-foreground/60">
+              Every test series and mentorship batch you've bought, in one place.
+            </p>
+          </div>
+
+          {purchases && purchases.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              <FilterChip
+                label="All"
+                count={purchases.length}
+                active={filter === "all"}
+                onClick={() => setFilter("all")}
+              />
+              <FilterChip
+                label="Test Series"
+                count={bundleCount}
+                active={filter === "bundle"}
+                onClick={() => setFilter("bundle")}
+              />
+              <FilterChip
+                label="Mentorship"
+                count={mentorshipCount}
+                active={filter === "mentorship"}
+                onClick={() => setFilter("mentorship")}
+              />
+            </div>
+          )}
         </div>
 
         {purchases === null ? (
-          <div className="flex justify-center py-16">
-            <Loader2 className="h-5 w-5 animate-spin text-foreground/40" />
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="clay overflow-hidden p-3">
+                <div className="clay-inset h-32 animate-pulse rounded-2xl bg-foreground/5" />
+                <div className="p-3 pt-4">
+                  <div className="h-4 w-3/4 animate-pulse rounded-full bg-foreground/10" />
+                  <div className="mt-3 h-3 w-1/2 animate-pulse rounded-full bg-foreground/10" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : purchases.length === 0 ? (
-          <div className="clay p-10 text-center">
-            <p className="font-display text-lg font-bold text-foreground">Nothing purchased yet</p>
+          <div className="clay p-10 text-center sm:p-14">
+            <div className="clay-inset mx-auto grid h-16 w-16 place-items-center rounded-2xl">
+              <PackageOpen className="h-7 w-7 text-foreground/40" strokeWidth={1.5} />
+            </div>
+            <p className="font-display mt-5 text-lg font-bold text-foreground">Nothing purchased yet</p>
             <p className="mx-auto mt-2 max-w-sm text-sm text-foreground/60">
               Browse test series and mentorship batches from your dashboard to get started.
             </p>
             <button
               onClick={() => navigate({ to: "/dashboard" })}
-              className="clay-btn mt-5 rounded-full px-6 py-2.5 text-sm font-semibold"
+              className="clay-btn mt-6 rounded-full px-6 py-2.5 text-sm font-semibold transition-transform duration-200 hover:-translate-y-0.5"
             >
               Go to dashboard
             </button>
           </div>
+        ) : filtered.length === 0 ? (
+          <div className="clay p-10 text-center">
+            <p className="text-sm text-foreground/60">Nothing in this category yet.</p>
+          </div>
         ) : (
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-            {purchases.map((p) => (
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {filtered.map((p) => (
               <button
                 key={`${p.itemType}-${p.itemId}`}
                 onClick={() =>
                   navigate({ to: "/course/$kind/$id", params: { kind: p.itemType, id: p.itemId } })
                 }
-                className="clay flex flex-col overflow-hidden p-3 text-left transition hover:brightness-95"
+                className="clay group flex flex-col overflow-hidden p-3 text-left transition-all duration-300 hover:-translate-y-1 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--sky-deep)]"
               >
-                <div className="clay-inset relative flex h-28 items-center justify-center overflow-hidden rounded-2xl bg-[var(--sky-soft)]">
+                <div className="clay-inset relative flex h-36 items-center justify-center overflow-hidden rounded-2xl bg-[var(--sky-soft)]">
                   {p.thumbnailUrl ? (
-                    <img src={p.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+                    <img
+                      src={p.thumbnailUrl}
+                      alt=""
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    />
                   ) : p.itemType === "bundle" ? (
-                    <BookOpen className="h-8 w-8 text-foreground/40" strokeWidth={1.5} />
+                    <BookOpen className="h-9 w-9 text-foreground/30" strokeWidth={1.5} />
                   ) : (
-                    <Users2 className="h-8 w-8 text-foreground/40" strokeWidth={1.5} />
+                    <Users2 className="h-9 w-9 text-foreground/30" strokeWidth={1.5} />
                   )}
-                  <span className="absolute right-2 top-2 rounded-full bg-background/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-foreground/70 shadow-sm">
+                  <span
+                    className={`absolute right-2.5 top-2.5 flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide shadow-sm ${
+                      p.itemType === "bundle"
+                        ? "bg-[var(--mint-soft)] text-foreground"
+                        : "bg-[var(--sky-deep)] text-white"
+                    }`}
+                  >
+                    {p.itemType === "bundle" ? (
+                      <BookOpen className="h-3 w-3" />
+                    ) : (
+                      <Users2 className="h-3 w-3" />
+                    )}
                     {p.itemType === "bundle" ? "Test Series" : "Mentorship"}
                   </span>
                 </div>
 
                 <div className="flex flex-1 flex-col p-3 pt-4">
-                  <h3 className="mb-1 font-display text-base font-bold tracking-tight text-foreground">
+                  <h3 className="mb-1 font-display text-base font-bold leading-snug tracking-tight text-foreground">
                     {p.title}
                   </h3>
-                  <p className="mb-3 text-xs text-foreground/50">
-                    Purchased {p.purchasedAt ? new Date(p.purchasedAt).toLocaleDateString() : ""} · ₹
-                    {p.amount.toLocaleString()}
-                  </p>
+                  {p.track && (
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground/40">
+                      {p.track}
+                    </p>
+                  )}
+                  <div className="mb-3 flex items-center gap-1.5 text-xs text-foreground/50">
+                    <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+                    <span>
+                      {formatDate(p.purchasedAt)} · {currency.format(p.amount)}
+                    </span>
+                  </div>
                   <span className="mt-auto flex items-center gap-1.5 text-sm font-semibold text-[var(--sky-deep)]">
-                    Open <ArrowRight className="h-3.5 w-3.5" />
+                    Open
+                    <ArrowRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-1" />
                   </span>
                 </div>
               </button>
@@ -123,5 +208,35 @@ function PurchasesPage() {
         )}
       </main>
     </div>
+  );
+}
+
+function FilterChip({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold transition-all duration-200 ${
+        active ? "clay-btn text-white" : "clay-chip text-foreground/70"
+      }`}
+    >
+      {label}
+      <span
+        className={`rounded-full px-1.5 py-0.5 text-[10px] ${
+          active ? "bg-white/20" : "bg-foreground/10"
+        }`}
+      >
+        {count}
+      </span>
+    </button>
   );
 }
