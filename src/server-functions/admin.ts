@@ -44,25 +44,6 @@ export const verifyAdminAccess = createServerFn({ method: "POST" })
   });
 
 // ─── Module 1: Executive Analytics ───────────────────────────────────────
-export const getAdminAnalytics = createServerFn({ method: "GET" })
-  .validator((data: { token: string }) => data)
-  .handler(async ({ data }) => {
-    await requireAdmin(data.token);
-    const db = await getDb();
-
-    const totalStudents = await db.collection("profiles").countDocuments();
-
-    // These three don't have a real data source wired up yet — no
-    // testAttempts / mentorshipSlots / purchases collections exist, and
-    // there's no Razorpay sync. Returning null (rendered as "—" in the UI)
-    // rather than a fabricated number.
-    return {
-      totalStudents,
-      activeMentorshipSessions: null as number | null,
-      monthlyRevenue: null as number | null,
-      mockTestsTaken: null as number | null,
-    };
-  });
 
 // ─── Module 3: Student Directory ─────────────────────────────────────────
 export const listStudents = createServerFn({ method: "GET" })
@@ -723,5 +704,271 @@ export const respondToMentorTicket = createServerFn({ method: "POST" })
       },
     );
     if (result.matchedCount === 0) throw new Error("Ticket not found.");
+    return { ok: true };
+  });
+export const getAdminAnalytics = createServerFn({ method: "GET" })
+  .validator((data: { token: string }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin(data.token);
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const [totalStudents, allPurchases, monthlyPurchases, mockTestsTaken] = await Promise.all([
+      db.collection("profiles").countDocuments({}),
+      db.collection("purchases").find({}).toArray(),
+      db.collection("purchases").find({ purchasedAt: { $gte: startOfMonth } }).toArray(),
+      db.collection("testAttempts").countDocuments({}),
+    ]);
+
+    const totalRevenue = allPurchases.reduce((sum, p) => sum + (p.amount as number), 0);
+    const monthlyRevenue = monthlyPurchases.reduce((sum, p) => sum + (p.amount as number), 0);
+
+    // Recent purchases feed — last 8, newest first.
+    const recent = [...allPurchases]
+      .sort((a, b) => {
+        const at = a.purchasedAt instanceof Date ? a.purchasedAt.getTime() : 0;
+        const bt = b.purchasedAt instanceof Date ? b.purchasedAt.getTime() : 0;
+        return bt - at;
+      })
+      .slice(0, 8);
+
+    const recentBundleIds = recent.filter((p) => p.itemType === "bundle").map((p) => new ObjectId(p.itemId as string));
+    const recentMentorshipIds = recent
+      .filter((p) => p.itemType === "mentorship")
+      .map((p) => new ObjectId(p.itemId as string));
+    const recentUids = Array.from(new Set(recent.map((p) => p.uid as string)));
+
+    const [recentBundles, recentMentorship, recentProfiles] = await Promise.all([
+      recentBundleIds.length ? db.collection("bundles").find({ _id: { $in: recentBundleIds } }).toArray() : [],
+      recentMentorshipIds.length
+        ? db.collection("mentorshipBatches").find({ _id: { $in: recentMentorshipIds } }).toArray()
+        : [],
+      recentUids.length
+        ? db.collection("profiles").find({ uid: { $in: recentUids } }, { projection: { uid: 1, fullName: 1 } }).toArray()
+        : [],
+    ]);
+    const bundleById = new Map(recentBundles.map((b) => [String(b._id), b]));
+    const mentorshipById = new Map(recentMentorship.map((b) => [String(b._id), b]));
+    const nameByUid = new Map(recentProfiles.map((p) => [p.uid as string, p.fullName as string]));
+
+    const recentPurchases = recent.map((p) => {
+      const item = p.itemType === "bundle" ? bundleById.get(p.itemId as string) : mentorshipById.get(p.itemId as string);
+      return {
+        studentName: nameByUid.get(p.uid as string) ?? "Student",
+        itemTitle: item ? ((p.itemType === "bundle" ? item.title : item.name) as string) : "Deleted item",
+        itemType: p.itemType as "bundle" | "mentorship",
+        amount: p.amount as number,
+        purchasedAt: p.purchasedAt instanceof Date ? p.purchasedAt.toISOString() : null,
+      };
+    });
+
+    // Top bundles by revenue — which content actually earns.
+    const revenueByBundle = new Map<string, number>();
+    for (const p of allPurchases) {
+      if (p.itemType !== "bundle") continue;
+      revenueByBundle.set(p.itemId as string, (revenueByBundle.get(p.itemId as string) ?? 0) + (p.amount as number));
+    }
+    const topBundleIds = Array.from(revenueByBundle.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([id]) => id);
+    const topBundleDocs = topBundleIds.length
+      ? await db.collection("bundles").find({ _id: { $in: topBundleIds.map((id) => new ObjectId(id)) } }).toArray()
+      : [];
+    const topBundleTitleById = new Map(topBundleDocs.map((b) => [String(b._id), b.title as string]));
+    const topBundles = topBundleIds.map((id) => ({
+      title: topBundleTitleById.get(id) ?? "Bundle",
+      revenue: revenueByBundle.get(id) ?? 0,
+      purchaseCount: allPurchases.filter((p) => p.itemType === "bundle" && p.itemId === id).length,
+    }));
+
+    return {
+      totalStudents,
+      totalRevenue,
+      monthlyRevenue,
+      totalPurchases: allPurchases.length,
+      mockTestsTaken,
+      recentPurchases,
+      topBundles,
+    };
+  });
+
+// ─── New: 360° student detail — profile + purchases + performance + devices
+// + tickets, all in one call, for the Students module's detail drawer ───────
+export const getAdminStudentFullProfile = createServerFn({ method: "GET" })
+  .validator((data: { token: string; uid: string }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin(data.token);
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+
+    const [profile, authUser, purchases, attempts, sessions, tickets] = await Promise.all([
+      db.collection("profiles").findOne({ uid: data.uid }),
+      adminAuth.getUser(data.uid).catch(() => null),
+      db.collection("purchases").find({ uid: data.uid }).sort({ purchasedAt: -1 }).toArray(),
+      db.collection("testAttempts").find({ uid: data.uid }).toArray(),
+      // NOTE: guessing the session collection is named "sessions" to match
+      // listSessions/forgetDevice's shape used elsewhere — rename if different.
+      db.collection("sessions").find({ uid: data.uid }).toArray(),
+      db.collection("supportTickets").find({ uid: data.uid }).sort({ createdAt: -1 }).toArray(),
+    ]);
+
+    const bundleIds = purchases.filter((p) => p.itemType === "bundle").map((p) => new ObjectId(p.itemId as string));
+    const mentorshipIds = purchases.filter((p) => p.itemType === "mentorship").map((p) => new ObjectId(p.itemId as string));
+    const [bundles, mentorshipBatches] = await Promise.all([
+      bundleIds.length ? db.collection("bundles").find({ _id: { $in: bundleIds } }).toArray() : [],
+      mentorshipIds.length ? db.collection("mentorshipBatches").find({ _id: { $in: mentorshipIds } }).toArray() : [],
+    ]);
+    const bundleById = new Map(bundles.map((b) => [String(b._id), b]));
+    const mentorshipById = new Map(mentorshipBatches.map((b) => [String(b._id), b]));
+
+    const purchaseRows = purchases.map((p) => {
+      const item = p.itemType === "bundle" ? bundleById.get(p.itemId as string) : mentorshipById.get(p.itemId as string);
+      return {
+        itemType: p.itemType as "bundle" | "mentorship",
+        title: item ? ((p.itemType === "bundle" ? item.title : item.name) as string) : "Item no longer available",
+        amount: p.amount as number,
+        purchasedAt: p.purchasedAt instanceof Date ? p.purchasedAt.toISOString() : null,
+      };
+    });
+
+    // Same per-bundle aggregation as getMyBatchPerformance in student-data.ts.
+    const byBundleId = new Map<string, { testIds: Set<string>; attemptCount: number; totalPercent: number; bestPercent: number }>();
+    for (const a of attempts) {
+      const bundleId = a.bundleId as string;
+      const entry = byBundleId.get(bundleId) ?? { testIds: new Set<string>(), attemptCount: 0, totalPercent: 0, bestPercent: 0 };
+      entry.testIds.add(a.testId as string);
+      entry.attemptCount += 1;
+      const percent = a.totalMarks > 0 ? (a.score / a.totalMarks) * 100 : 0;
+      entry.totalPercent += percent;
+      entry.bestPercent = Math.max(entry.bestPercent, percent);
+      byBundleId.set(bundleId, entry);
+    }
+    const batchPerformance = Array.from(byBundleId.entries()).map(([bundleId, stats]) => ({
+      bundleId,
+      bundleTitle: (bundleById.get(bundleId)?.title as string) ?? "Bundle",
+      testsAttempted: stats.testIds.size,
+      totalAttempts: stats.attemptCount,
+      averagePercent: Math.round(stats.totalPercent / stats.attemptCount),
+      bestPercent: Math.round(stats.bestPercent),
+    }));
+
+    return {
+      profile: {
+        uid: data.uid,
+        fullName: (profile?.fullName as string) || authUser?.displayName || "Student",
+        email: authUser?.email ?? null,
+        mobile: (profile?.mobile as string) ?? "",
+        city: (profile?.city as string) ?? "",
+        currentClass: (profile?.currentClass as string) ?? "",
+        board: (profile?.board as string) ?? "",
+        targetExam: (profile?.targetExam as string) || "NEET",
+        track: (profile?.track as string) ?? "",
+        joinedAt: authUser?.metadata.creationTime ?? null,
+      },
+      purchases: purchaseRows,
+      batchPerformance,
+      devices: sessions.map((s) => ({
+        deviceId: s.deviceId as string,
+        deviceLabel: s.deviceLabel as string,
+        ip: s.ip as string,
+        lastSeenAt: s.lastSeenAt instanceof Date ? s.lastSeenAt.toISOString() : null,
+      })),
+      tickets: tickets.map((t) => ({
+        id: String(t._id),
+        subject: t.subject as string,
+        message: t.message as string,
+        status: (t.status as string) ?? "open",
+        itemType: (t.itemType as "platform" | "bundle" | "mentorship") ?? "platform",
+        createdAt: t.createdAt instanceof Date ? t.createdAt.toISOString() : null,
+      })),
+    };
+  });
+
+// ─── Updated: pulls contact details straight from the ticket's own snapshot
+// instead of joining back to profiles — works even if the profile changes
+// or is deleted after the ticket was filed. Falls back to "Unknown student"
+// for any ticket filed before this snapshot existed.
+export const listAllTicketsAdmin = createServerFn({ method: "GET" })
+  .validator((data: { token: string }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin(data.token);
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+
+    const tickets = await db.collection("supportTickets").find({}).sort({ createdAt: -1 }).toArray();
+
+    const bundleIds = tickets
+      .filter((t) => t.itemType === "bundle" && t.itemId)
+      .map((t) => new ObjectId(t.itemId as string));
+    const mentorshipIds = tickets
+      .filter((t) => t.itemType === "mentorship" && t.itemId)
+      .map((t) => new ObjectId(t.itemId as string));
+
+    const [bundles, mentorshipBatches] = await Promise.all([
+      bundleIds.length ? db.collection("bundles").find({ _id: { $in: bundleIds } }).toArray() : [],
+      mentorshipIds.length ? db.collection("mentorshipBatches").find({ _id: { $in: mentorshipIds } }).toArray() : [],
+    ]);
+    const bundleTitleById = new Map(bundles.map((b) => [String(b._id), b.title as string]));
+    const mentorshipTitleById = new Map(mentorshipBatches.map((b) => [String(b._id), b.name as string]));
+
+    return {
+      tickets: tickets.map((t) => {
+        const source =
+          t.itemType === "bundle" && t.itemId
+            ? { type: "bundle" as const, itemTitle: bundleTitleById.get(t.itemId as string) ?? "Deleted bundle" }
+            : t.itemType === "mentorship" && t.itemId
+              ? { type: "mentorship" as const, itemTitle: mentorshipTitleById.get(t.itemId as string) ?? "Deleted batch" }
+              : { type: "platform" as const };
+        return {
+          id: String(t._id),
+          uid: t.uid as string,
+          studentName: (t.studentName as string) ?? "Unknown student",
+          studentEmail: (t.studentEmail as string) ?? null,
+          studentMobile: (t.studentMobile as string) ?? null,
+          subject: t.subject as string,
+          message: t.message as string,
+          status: (t.status as string) ?? "open",
+          source,
+          adminReply: (t.adminReply as string) ?? null,
+          rating: (t.rating as number) ?? null,
+          createdAt: t.createdAt instanceof Date ? t.createdAt.toISOString() : null,
+          repliedAt: t.repliedAt instanceof Date ? t.repliedAt.toISOString() : null,
+        };
+      }),
+    };
+  });
+
+// ─── New: writing a reply is now what resolves a ticket — a status flip
+// with nothing attached wasn't answering the student's question, and gave
+// them nothing to rate.
+export const replyToTicket = createServerFn({ method: "POST" })
+  .validator((data: { token: string; ticketId: string; reply: string }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin(data.token);
+    if (!data.reply.trim()) throw new Error("Reply can't be empty.");
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+    await db.collection("supportTickets").updateOne(
+      { _id: new ObjectId(data.ticketId) },
+      { $set: { adminReply: data.reply.trim(), status: "resolved", repliedAt: new Date() } },
+    );
+    return { ok: true };
+  });
+
+// Kept for reopening a ticket without editing its reply text.
+export const updateTicketStatus = createServerFn({ method: "POST" })
+  .validator((data: { token: string; ticketId: string; status: "open" | "resolved" }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin(data.token);
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+    await db
+      .collection("supportTickets")
+      .updateOne({ _id: new ObjectId(data.ticketId) }, { $set: { status: data.status } });
     return { ok: true };
   });

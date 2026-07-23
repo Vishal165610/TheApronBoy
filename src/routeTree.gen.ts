@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TicketsRouteImport } from './routes/tickets'
 import { Route as PurchasesRouteImport } from './routes/purchases'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as JoinMentorRouteImport } from './routes/join-mentor'
@@ -32,6 +33,11 @@ import { Route as AdminDashboardRouteImport } from './routes/admin.dashboard'
 import { Route as AdminAuthRouteImport } from './routes/admin.auth'
 import { Route as CourseKindIdRouteImport } from './routes/course.$kind.$id'
 
+const TicketsRoute = TicketsRouteImport.update({
+  id: '/tickets',
+  path: '/tickets',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PurchasesRoute = PurchasesRouteImport.update({
   id: '/purchases',
   path: '/purchases',
@@ -153,6 +159,7 @@ export interface FileRoutesByFullPath {
   '/join-mentor': typeof JoinMentorRoute
   '/profile': typeof ProfileRoute
   '/purchases': typeof PurchasesRoute
+  '/tickets': typeof TicketsRoute
   '/admin/auth': typeof AdminAuthRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/lecture/$sessionId': typeof LectureSessionIdRoute
@@ -177,6 +184,7 @@ export interface FileRoutesByTo {
   '/join-mentor': typeof JoinMentorRoute
   '/profile': typeof ProfileRoute
   '/purchases': typeof PurchasesRoute
+  '/tickets': typeof TicketsRoute
   '/admin/auth': typeof AdminAuthRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/lecture/$sessionId': typeof LectureSessionIdRoute
@@ -202,6 +210,7 @@ export interface FileRoutesById {
   '/join-mentor': typeof JoinMentorRoute
   '/profile': typeof ProfileRoute
   '/purchases': typeof PurchasesRoute
+  '/tickets': typeof TicketsRoute
   '/admin/auth': typeof AdminAuthRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/lecture/$sessionId': typeof LectureSessionIdRoute
@@ -228,6 +237,7 @@ export interface FileRouteTypes {
     | '/join-mentor'
     | '/profile'
     | '/purchases'
+    | '/tickets'
     | '/admin/auth'
     | '/admin/dashboard'
     | '/lecture/$sessionId'
@@ -252,6 +262,7 @@ export interface FileRouteTypes {
     | '/join-mentor'
     | '/profile'
     | '/purchases'
+    | '/tickets'
     | '/admin/auth'
     | '/admin/dashboard'
     | '/lecture/$sessionId'
@@ -276,6 +287,7 @@ export interface FileRouteTypes {
     | '/join-mentor'
     | '/profile'
     | '/purchases'
+    | '/tickets'
     | '/admin/auth'
     | '/admin/dashboard'
     | '/lecture/$sessionId'
@@ -301,6 +313,7 @@ export interface RootRouteChildren {
   JoinMentorRoute: typeof JoinMentorRoute
   ProfileRoute: typeof ProfileRoute
   PurchasesRoute: typeof PurchasesRoute
+  TicketsRoute: typeof TicketsRoute
   AdminAuthRoute: typeof AdminAuthRoute
   AdminDashboardRoute: typeof AdminDashboardRoute
   LectureSessionIdRoute: typeof LectureSessionIdRoute
@@ -318,6 +331,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/tickets': {
+      id: '/tickets'
+      path: '/tickets'
+      fullPath: '/tickets'
+      preLoaderRoute: typeof TicketsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/purchases': {
       id: '/purchases'
       path: '/purchases'
@@ -485,6 +505,7 @@ const rootRouteChildren: RootRouteChildren = {
   JoinMentorRoute: JoinMentorRoute,
   ProfileRoute: ProfileRoute,
   PurchasesRoute: PurchasesRoute,
+  TicketsRoute: TicketsRoute,
   AdminAuthRoute: AdminAuthRoute,
   AdminDashboardRoute: AdminDashboardRoute,
   LectureSessionIdRoute: LectureSessionIdRoute,

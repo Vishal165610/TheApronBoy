@@ -1,52 +1,56 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   Loader2,
   ShieldCheck,
   LayoutDashboard,
-  FileText,
   Users,
   GraduationCap,
-  Megaphone,
   LogOut,
   Users2,
-  BookOpen,
   IndianRupee,
   ClipboardCheck,
   Smartphone,
   X,
-  CalendarClock,
+  Menu,
   Package,
+  Boxes,
   ClipboardList,
   ListChecks,
   Search,
+  ChevronDown,
+  AlertCircle,
+  RefreshCw,
+  Inbox,
+  LifeBuoy,
+  MessageSquareText,
+  Send,
+  ArrowUpRight,
+  ArrowLeft,
+  Wallet,
+  ShoppingBag,
+  CheckCircle2,
+  Layers3,
+  Mail,
+  Phone,
+  MapPin,
+  Star,
 } from "lucide-react";
 import { useAdminClaim } from "@/lib/use-admin-claim";
 import { signOutUser } from "@/lib/firebase";
 import {
   getAdminAnalytics,
   listStudents,
-  adminListDevicesForUser,
-  createTestSeries,
-  listTestSeriesAdmin,
-  postAnnouncement,
-  listAnnouncements,
+  getAdminStudentFullProfile,
+  listAllTicketsAdmin,
+  updateTicketStatus,
+  replyToTicket,
 } from "@/server-functions/admin";
 import { BundleCreationModule, BundleManagementModule } from "@/components/bundle-modules";
 import { TestCoreModule } from "@/components/test-core-module";
 import { QuestionIngestionModule } from "@/components/question-ingestion-module";
 import { BundleInspectorModule } from "@/components/bundle-inspector-module";
 import { MentorHubModule } from "@/components/mentor-hub-module";
-
-export const Route = createFileRoute("/admin/dashboard")({
-  head: () => ({
-    meta: [
-      { title: "Admin Command Center · Edurack" },
-      { name: "robots", content: "noindex" },
-    ],
-  }),
-  component: AdminDashboardPage,
-});
 
 type ModuleKey =
   | "overview"
@@ -55,28 +59,79 @@ type ModuleKey =
   | "testCore"
   | "questions"
   | "inspector"
-  | "tests"
   | "students"
   | "mentors"
-  | "announcements";
+  | "tickets";
 
-const MODULES: { key: ModuleKey; label: string; icon: typeof LayoutDashboard }[] = [
-  { key: "overview", label: "Overview", icon: LayoutDashboard },
-  { key: "bundles", label: "Create Bundle", icon: Package },
-  { key: "bundleManage", label: "Manage Bundles", icon: Megaphone },
-  { key: "testCore", label: "Test Core", icon: ClipboardList },
-  { key: "questions", label: "Questions", icon: ListChecks },
-  { key: "inspector", label: "Inspector", icon: Search },
-  { key: "tests", label: "Test Series", icon: FileText },
-  { key: "students", label: "Students", icon: Users },
-  { key: "mentors", label: "Mentors", icon: GraduationCap },
-  { key: "announcements", label: "Announcements", icon: Megaphone },
+type ModuleDef = { key: ModuleKey; label: string; icon: typeof LayoutDashboard };
+
+// "Test Series" and "Announcements" have been removed entirely — Test Series
+// wrote to a collection the real exam engine never reads, and Announcements
+// posted somewhere the student dashboard doesn't read yet. Keeping either
+// around just meant admins could enter data with no visible effect.
+const MODULE_GROUPS: { label: string; items: ModuleDef[] }[] = [
+  { label: "Overview", items: [{ key: "overview", label: "Overview", icon: LayoutDashboard }] },
+  {
+    label: "Content",
+    items: [
+      { key: "bundles", label: "Create Bundle", icon: Package },
+      { key: "bundleManage", label: "Manage Bundles", icon: Boxes },
+      { key: "testCore", label: "Test Core", icon: ClipboardList },
+      { key: "questions", label: "Questions", icon: ListChecks },
+      { key: "inspector", label: "Inspector", icon: Search },
+    ],
+  },
+  {
+    label: "People",
+    items: [
+      { key: "students", label: "Students", icon: Users },
+      { key: "mentors", label: "Mentors", icon: GraduationCap },
+    ],
+  },
+  { label: "Support", items: [{ key: "tickets", label: "Tickets", icon: LifeBuoy }] },
 ];
+
+const MODULE_LOOKUP: Record<ModuleKey, ModuleDef> = Object.fromEntries(
+  MODULE_GROUPS.flatMap((g) => g.items).map((i) => [i.key, i]),
+) as Record<ModuleKey, ModuleDef>;
+const MODULE_KEYS = Object.keys(MODULE_LOOKUP) as ModuleKey[];
+
+export const Route = createFileRoute("/admin/dashboard")({
+  head: () => ({
+    meta: [
+      { title: "Admin Command Center · Edurack" },
+      { name: "robots", content: "noindex" },
+    ],
+  }),
+  validateSearch: (search: Record<string, unknown>): { tab?: ModuleKey } => {
+    const raw = typeof search.tab === "string" ? (search.tab as ModuleKey) : undefined;
+    return { tab: raw && MODULE_KEYS.includes(raw) ? raw : undefined };
+  },
+  component: AdminDashboardPage,
+});
+
+const currency = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  maximumFractionDigits: 0,
+});
+
+function formatDate(iso: string | null) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function formatDateTime(iso: string | null) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+}
 
 function AdminDashboardPage() {
   const { adminUser, isAdmin, loading } = useAdminClaim();
   const navigate = useNavigate();
-  const [activeModule, setActiveModule] = useState<ModuleKey>("overview");
+  const { tab } = Route.useSearch();
+  const activeModule: ModuleKey = tab ?? "overview";
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     if (loading) return;
@@ -84,6 +139,11 @@ function AdminDashboardPage() {
       navigate({ to: "/admin/auth" });
     }
   }, [loading, adminUser, isAdmin, navigate]);
+
+  function setActiveModule(key: ModuleKey) {
+    navigate({ to: "/admin/dashboard", search: { tab: key }, replace: true });
+    setDrawerOpen(false);
+  }
 
   async function handleSignOut() {
     await signOutUser();
@@ -98,71 +158,180 @@ function AdminDashboardPage() {
     );
   }
 
+  const adminEmail = (adminUser as { email?: string | null })?.email ?? undefined;
+  const activeDef = MODULE_LOOKUP[activeModule];
+
   return (
-    <div className="relative flex min-h-screen">
+    <div className="relative min-h-screen">
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute -top-32 -left-20 h-96 w-96 rounded-full bg-[var(--sky-soft)] opacity-40 blur-3xl" />
         <div className="absolute top-1/3 -right-24 h-[28rem] w-[28rem] rounded-full bg-[var(--mint-soft)] opacity-30 blur-3xl" />
       </div>
 
-      {/* ── Sticky sidebar ─────────────────────────────────────────────── */}
-      <aside className="sticky top-0 flex h-screen w-16 shrink-0 flex-col items-center gap-2 border-r border-foreground/5 bg-background/70 py-5 backdrop-blur-md sm:w-56 sm:items-stretch sm:px-3">
-        <div className="mb-4 flex items-center gap-2 px-1 sm:px-2">
+      <div className="flex min-h-screen">
+        <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-foreground/5 bg-background/70 py-5 backdrop-blur-md md:flex">
+          <SidebarContent
+            activeModule={activeModule}
+            onSelect={setActiveModule}
+            onSignOut={handleSignOut}
+            adminEmail={adminEmail}
+          />
+        </aside>
+
+        <div className="flex min-w-0 flex-1 flex-col md:hidden">
+          <header className="clay-sm sticky top-0 z-20 mx-3 mt-3 flex items-center justify-between px-4 py-3">
+            <div className="flex items-center gap-2">
+              <div className="clay flex h-8 w-8 shrink-0 items-center justify-center">
+                <ShieldCheck className="h-4 w-4 text-foreground/70" />
+              </div>
+              <span className="font-display text-sm font-bold text-foreground">{activeDef.label}</span>
+            </div>
+            <button
+              onClick={() => setDrawerOpen(true)}
+              className="clay-btn-ghost grid h-9 w-9 place-items-center"
+              aria-label="Open menu"
+            >
+              <Menu className="h-4.5 w-4.5" />
+            </button>
+          </header>
+
+          {drawerOpen && (
+            <div className="fixed inset-0 z-40 flex md:hidden">
+              <div className="absolute inset-0 bg-black/40" onClick={() => setDrawerOpen(false)} />
+              <div className="clay relative flex h-full w-[82%] max-w-xs flex-col rounded-l-none rounded-r-3xl py-5">
+                <div className="mb-2 flex items-center justify-between px-4">
+                  <span className="font-display text-sm font-bold text-foreground">Admin Center</span>
+                  <button onClick={() => setDrawerOpen(false)} className="text-foreground/40 hover:text-foreground/70">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <SidebarContent
+                  activeModule={activeModule}
+                  onSelect={setActiveModule}
+                  onSignOut={handleSignOut}
+                  adminEmail={adminEmail}
+                  compactHeader
+                />
+              </div>
+            </div>
+          )}
+
+          <main className="min-w-0 flex-1 px-4 py-6">
+            <ModuleRouter activeModule={activeModule} adminUser={adminUser} />
+          </main>
+        </div>
+
+        <main className="hidden min-w-0 flex-1 px-8 py-8 md:block">
+          <div className="mx-auto max-w-5xl">
+            <ModuleRouter activeModule={activeModule} adminUser={adminUser} />
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function SidebarContent({
+  activeModule,
+  onSelect,
+  onSignOut,
+  adminEmail,
+  compactHeader,
+}: {
+  activeModule: ModuleKey;
+  onSelect: (key: ModuleKey) => void;
+  onSignOut: () => void;
+  adminEmail?: string;
+  compactHeader?: boolean;
+}) {
+  return (
+    <>
+      {!compactHeader && (
+        <div className="mb-4 flex items-center gap-2 px-3">
           <div className="clay flex h-9 w-9 shrink-0 items-center justify-center">
             <ShieldCheck className="h-4 w-4 text-foreground/70" />
           </div>
-          <span className="hidden font-display text-sm font-bold tracking-tight text-foreground sm:inline">
-            Admin Center
-          </span>
+          <span className="truncate font-display text-sm font-bold tracking-tight text-foreground">Admin Center</span>
         </div>
+      )}
 
-        <nav className="flex flex-1 flex-col gap-1">
-          {MODULES.map((m) => {
-            const Icon = m.icon;
-            const active = activeModule === m.key;
-            return (
-              <button
-                key={m.key}
-                type="button"
-                onClick={() => setActiveModule(m.key)}
-                className={`flex items-center justify-center gap-3 rounded-2xl px-0 py-2.5 text-sm font-semibold transition-all sm:justify-start sm:px-3 ${
-                  active ? "clay-btn text-white" : "text-foreground/70 hover:bg-foreground/5"
-                }`}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                <span className="hidden sm:inline">{m.label}</span>
-              </button>
-            );
-          })}
-        </nav>
+      <nav className="flex-1 space-y-4 overflow-y-auto px-3">
+        {MODULE_GROUPS.map((group) => (
+          <div key={group.label}>
+            <p className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-[0.15em] text-foreground/35">
+              {group.label}
+            </p>
+            <div className="space-y-1">
+              {group.items.map((m) => {
+                const Icon = m.icon;
+                const active = activeModule === m.key;
+                return (
+                  <button
+                    key={m.key}
+                    type="button"
+                    onClick={() => onSelect(m.key)}
+                    className={`flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-semibold transition-all duration-200 ${
+                      active ? "clay-btn text-white" : "text-foreground/70 hover:bg-foreground/5"
+                    }`}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{m.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </nav>
 
+      <div className="mt-4 space-y-1 border-t border-foreground/5 px-3 pt-4">
+        {adminEmail && (
+          <p className="truncate px-3 text-xs text-foreground/40" title={adminEmail}>
+            {adminEmail}
+          </p>
+        )}
         <button
           type="button"
-          onClick={handleSignOut}
-          className="flex items-center justify-center gap-3 rounded-2xl px-0 py-2.5 text-sm font-semibold text-foreground/60 transition hover:bg-foreground/5 sm:justify-start sm:px-3"
+          onClick={onSignOut}
+          className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-semibold text-foreground/60 transition-colors duration-200 hover:bg-foreground/5"
         >
           <LogOut className="h-4 w-4 shrink-0" />
-          <span className="hidden sm:inline">Sign out</span>
+          Sign out
         </button>
-      </aside>
-
-      {/* ── Content canvas ─────────────────────────────────────────────── */}
-      <main className="min-w-0 flex-1 px-4 py-6 sm:px-8 sm:py-8">
-        <div className="mx-auto max-w-5xl">
-          {activeModule === "overview" && <OverviewModule adminUser={adminUser} />}
-          {activeModule === "bundles" && <BundleCreationModule adminUser={adminUser} />}
-          {activeModule === "bundleManage" && <BundleManagementModule adminUser={adminUser} />}
-          {activeModule === "testCore" && <TestCoreModule adminUser={adminUser} />}
-          {activeModule === "questions" && <QuestionIngestionModule adminUser={adminUser} />}
-          {activeModule === "inspector" && <BundleInspectorModule adminUser={adminUser} />}
-          {activeModule === "tests" && <TestSeriesModule adminUser={adminUser} />}
-          {activeModule === "students" && <StudentsModule adminUser={adminUser} />}
-          {activeModule === "mentors" && <MentorHubModule adminUser={adminUser} />}
-          {activeModule === "announcements" && <AnnouncementsModule adminUser={adminUser} />}
-        </div>
-      </main>
-    </div>
+      </div>
+    </>
   );
+}
+
+function ModuleRouter({
+  activeModule,
+  adminUser,
+}: {
+  activeModule: ModuleKey;
+  adminUser: { getIdToken: () => Promise<string> };
+}) {
+  switch (activeModule) {
+    case "overview":
+      return <OverviewModule adminUser={adminUser} />;
+    case "bundles":
+      return <BundleCreationModule adminUser={adminUser} />;
+    case "bundleManage":
+      return <BundleManagementModule adminUser={adminUser} />;
+    case "testCore":
+      return <TestCoreModule adminUser={adminUser} />;
+    case "questions":
+      return <QuestionIngestionModule adminUser={adminUser} />;
+    case "inspector":
+      return <BundleInspectorModule adminUser={adminUser} />;
+    case "students":
+      return <StudentsModule adminUser={adminUser} />;
+    case "mentors":
+      return <MentorHubModule adminUser={adminUser} />;
+    case "tickets":
+      return <TicketsModule adminUser={adminUser} />;
+    default:
+      return null;
+  }
 }
 
 function ModuleHeader({ title, subtitle }: { title: string; subtitle: string }) {
@@ -174,66 +343,197 @@ function ModuleHeader({ title, subtitle }: { title: string; subtitle: string }) 
   );
 }
 
-// ─── Module 1: Executive Analytics ──────────────────────────────────────────
-function OverviewModule({ adminUser }: { adminUser: { getIdToken: () => Promise<string> } }) {
-  const [analytics, setAnalytics] = useState<{
-    totalStudents: number;
-    activeMentorshipSessions: number | null;
-    monthlyRevenue: number | null;
-    mockTestsTaken: number | null;
-  } | null>(null);
+function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="flex flex-col items-center gap-3 py-8 text-center">
+      <div className="clay-inset grid h-12 w-12 place-items-center rounded-2xl">
+        <AlertCircle className="h-5 w-5 text-foreground/40" />
+      </div>
+      <p className="max-w-sm text-sm text-foreground/60">{message}</p>
+      <button
+        onClick={onRetry}
+        className="clay-btn-ghost inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-transform duration-200 hover:-translate-y-0.5"
+      >
+        <RefreshCw className="h-3.5 w-3.5" />
+        Try again
+      </button>
+    </div>
+  );
+}
 
-  useEffect(() => {
-    (async () => {
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="flex flex-col items-center gap-2 py-8 text-center">
+      <div className="clay-inset grid h-12 w-12 place-items-center rounded-2xl">
+        <Inbox className="h-5 w-5 text-foreground/30" />
+      </div>
+      <p className="text-sm text-foreground/60">{message}</p>
+    </div>
+  );
+}
+
+// ─── Module: Overview ────────────────────────────────────────────────────────
+type RecentPurchase = {
+  studentName: string;
+  itemTitle: string;
+  itemType: "bundle" | "mentorship";
+  amount: number;
+  purchasedAt: string | null;
+};
+type TopBundle = { title: string; revenue: number; purchaseCount: number };
+type Analytics = {
+  totalStudents: number;
+  totalRevenue: number;
+  monthlyRevenue: number;
+  totalPurchases: number;
+  mockTestsTaken: number;
+  recentPurchases: RecentPurchase[];
+  topBundles: TopBundle[];
+};
+
+function OverviewModule({ adminUser }: { adminUser: { getIdToken: () => Promise<string> } }) {
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+
+  async function load() {
+    setStatus("loading");
+    try {
       const token = await adminUser.getIdToken();
       const data = await getAdminAnalytics({ data: { token } });
-      setAnalytics(data);
-    })();
-  }, [adminUser]);
+      setAnalytics(data as unknown as Analytics);
+      setStatus("ready");
+    } catch {
+      setStatus("error");
+    }
+  }
 
-  const cards = [
-    {
-      label: "Total Registered Students",
-      value: analytics?.totalStudents ?? null,
-      icon: Users2,
-      accent: "sky" as const,
-    },
-    {
-      label: "Active Live Mentorship Sessions",
-      value: analytics?.activeMentorshipSessions ?? null,
-      icon: CalendarClock,
-      accent: "teal" as const,
-      comingSoon: true,
-    },
-    {
-      label: "Current Month Revenue",
-      value: analytics?.monthlyRevenue ?? null,
-      icon: IndianRupee,
-      accent: "mint" as const,
-      comingSoon: true,
-    },
-    {
-      label: "Total Mock Tests Taken",
-      value: analytics?.mockTestsTaken ?? null,
-      icon: ClipboardCheck,
-      accent: "coral" as const,
-      comingSoon: true,
-    },
-  ];
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (status === "error") {
+    return (
+      <div>
+        <ModuleHeader title="Executive Analytics" subtitle="Platform-wide numbers at a glance." />
+        <div className="clay p-5">
+          <ErrorState message="Couldn't load analytics. Check your connection and try again." onRetry={load} />
+        </div>
+      </div>
+    );
+  }
+
+  const loading = status === "loading";
 
   return (
     <div>
       <ModuleHeader title="Executive Analytics" subtitle="Platform-wide numbers at a glance." />
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {cards.map((c) => (
-          <MetricCard key={c.label} {...c} />
-        ))}
+        <MetricCard
+          icon={Users2}
+          accent="sky"
+          label="Total Students"
+          loading={loading}
+          value={analytics ? analytics.totalStudents.toLocaleString() : "—"}
+        />
+        <MetricCard
+          icon={IndianRupee}
+          accent="mint"
+          label="Total Revenue"
+          loading={loading}
+          value={analytics ? currency.format(analytics.totalRevenue) : "—"}
+          sub={analytics ? `${currency.format(analytics.monthlyRevenue)} this month` : undefined}
+        />
+        <MetricCard
+          icon={ClipboardCheck}
+          accent="coral"
+          label="Mock Tests Taken"
+          loading={loading}
+          value={analytics ? analytics.mockTestsTaken.toLocaleString() : "—"}
+        />
+        <MetricCard
+          icon={ShoppingBag}
+          accent="teal"
+          label="Total Purchases"
+          loading={loading}
+          value={analytics ? analytics.totalPurchases.toLocaleString() : "—"}
+        />
       </div>
-      <p className="mt-4 text-xs text-foreground/40">
-        Mentorship sessions, revenue, and mock test counts are pending their respective data
-        sources (live session tracking, Razorpay sync, and test attempt logging) — shown as "—"
-        until those are wired up, rather than invented numbers.
-      </p>
+
+      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {/* Recent purchases feed */}
+        <div className="clay p-5 sm:p-6">
+          <div className="mb-4 flex items-center gap-2">
+            <Wallet className="h-4 w-4 text-foreground/60" />
+            <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-foreground/60">Recent purchases</h2>
+          </div>
+          {loading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="clay-inset h-14 animate-pulse rounded-2xl bg-foreground/5" />
+              ))}
+            </div>
+          ) : !analytics || analytics.recentPurchases.length === 0 ? (
+            <EmptyState message="No purchases yet." />
+          ) : (
+            <ul className="space-y-2">
+              {analytics.recentPurchases.map((p, i) => (
+                <li key={i} className="clay-inset flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-foreground">{p.studentName}</p>
+                    <p className="truncate text-xs text-foreground/50">
+                      {p.itemTitle} · {formatDate(p.purchasedAt)}
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${
+                      p.itemType === "bundle" ? "text-foreground/80" : "text-[var(--sky-deep)]"
+                    }`}
+                  >
+                    {currency.format(p.amount)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Top bundles by revenue */}
+        <div className="clay p-5 sm:p-6">
+          <div className="mb-4 flex items-center gap-2">
+            <Layers3 className="h-4 w-4 text-foreground/60" />
+            <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-foreground/60">
+              Top bundles by revenue
+            </h2>
+          </div>
+          {loading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="clay-inset h-14 animate-pulse rounded-2xl bg-foreground/5" />
+              ))}
+            </div>
+          ) : !analytics || analytics.topBundles.length === 0 ? (
+            <EmptyState message="No bundle sales yet." />
+          ) : (
+            <ul className="space-y-2">
+              {analytics.topBundles.map((b, i) => (
+                <li key={i} className="clay-inset px-4 py-3">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <p className="truncate text-sm font-semibold text-foreground">{b.title}</p>
+                    <span className="shrink-0 text-sm font-bold text-[var(--sky-deep)]">
+                      {currency.format(b.revenue)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-foreground/50">
+                    {b.purchaseCount} purchase{b.purchaseCount !== 1 ? "s" : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -241,15 +541,17 @@ function OverviewModule({ adminUser }: { adminUser: { getIdToken: () => Promise<
 function MetricCard({
   label,
   value,
+  sub,
   icon: Icon,
   accent,
-  comingSoon,
+  loading,
 }: {
   label: string;
-  value: number | null;
+  value: string;
+  sub?: string;
   icon: typeof Users2;
   accent: "sky" | "teal" | "mint" | "coral";
-  comingSoon?: boolean;
+  loading?: boolean;
 }) {
   const accentVar = {
     sky: "var(--sky-soft)",
@@ -259,177 +561,25 @@ function MetricCard({
   }[accent];
 
   return (
-    <div className="clay p-5">
+    <div className="clay p-5 transition-transform duration-300 hover:-translate-y-1">
       <div
         className="clay-inset mb-3 flex h-10 w-10 items-center justify-center rounded-2xl"
         style={{ background: accentVar }}
       >
         <Icon className="h-5 w-5 text-foreground/60" />
       </div>
-      <p className="font-display text-2xl font-bold tracking-tight text-foreground">
-        {value === null ? "—" : value.toLocaleString()}
-      </p>
-      <p className="mt-1 text-xs font-medium text-foreground/60">{label}</p>
-      {comingSoon && (
-        <span className="mt-2 inline-block rounded-full bg-foreground/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-foreground/40">
-          Coming soon
-        </span>
+      {loading ? (
+        <div className="h-8 w-20 animate-pulse rounded-full bg-foreground/10" />
+      ) : (
+        <p className="font-display text-2xl font-bold tracking-tight text-foreground">{value}</p>
       )}
+      <p className="mt-1 text-xs font-medium text-foreground/60">{label}</p>
+      {sub && !loading && <p className="mt-0.5 text-[11px] text-foreground/40">{sub}</p>}
     </div>
   );
 }
 
-// ─── Module 2: Test Series & Content Manager ────────────────────────────────
-type TestSeriesRow = {
-  id: string;
-  title: string;
-  subject: string;
-  totalMarks: number;
-  timeLimitMinutes: number;
-  track: string;
-  cbtEngineSynced: boolean;
-  createdAt: string | null;
-};
-
-function TestSeriesModule({ adminUser }: { adminUser: { getIdToken: () => Promise<string> } }) {
-  const [rows, setRows] = useState<TestSeriesRow[] | null>(null);
-  const [title, setTitle] = useState("");
-  const [subject, setSubject] = useState<"Physics" | "Chemistry" | "Biology" | "Full-Length Mock">("Physics");
-  const [totalMarks, setTotalMarks] = useState("180");
-  const [timeLimit, setTimeLimit] = useState("180");
-  const [track, setTrack] = useState<"Dropper" | "11th" | "12th" | "All">("All");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function refresh() {
-    const token = await adminUser.getIdToken();
-    const { testSeries } = await listTestSeriesAdmin({ data: { token } });
-    setRows(testSeries as TestSeriesRow[]);
-  }
-
-  useEffect(() => {
-    refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adminUser]);
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    if (!title.trim()) return setError("Enter a test title.");
-    const marks = Number(totalMarks);
-    const minutes = Number(timeLimit);
-    if (!marks || marks <= 0) return setError("Enter valid total marks.");
-    if (!minutes || minutes <= 0) return setError("Enter a valid time limit.");
-
-    setSaving(true);
-    try {
-      const token = await adminUser.getIdToken();
-      await createTestSeries({
-        data: { token, testSeries: { title, subject, totalMarks: marks, timeLimitMinutes: minutes, track } },
-      });
-      setTitle("");
-      setTotalMarks("180");
-      setTimeLimit("180");
-      await refresh();
-    } catch {
-      setError("Could not save. Try again.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div>
-      <ModuleHeader title="Test Series & Content Manager" subtitle="Upload and manage NEET test series." />
-
-      <div className="clay mb-6 p-5 sm:p-6">
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.15em] text-foreground/60">
-          Upload a new test
-        </h2>
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <AdminInput placeholder="Test title (e.g. Full Syllabus Mock #12)" value={title} onChange={setTitle} />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <AdminSelect
-              value={subject}
-              onChange={(v) => setSubject(v as typeof subject)}
-              options={["Physics", "Chemistry", "Biology", "Full-Length Mock"]}
-            />
-            <AdminInput placeholder="Total marks" value={totalMarks} onChange={setTotalMarks} inputMode="numeric" />
-            <AdminInput
-              placeholder="Time limit (minutes)"
-              value={timeLimit}
-              onChange={setTimeLimit}
-              inputMode="numeric"
-            />
-          </div>
-          <AdminSelect
-            value={track}
-            onChange={(v) => setTrack(v as typeof track)}
-            options={["All", "Dropper", "11th", "12th"]}
-            label="Batch / track"
-          />
-
-          {error && (
-            <p className="rounded-2xl bg-[var(--coral-soft)]/50 px-4 py-2 text-xs font-medium text-foreground">
-              {error}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={saving}
-            className="clay-btn flex items-center justify-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold disabled:opacity-70"
-          >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Upload test"}
-          </button>
-        </form>
-      </div>
-
-      <div className="clay mb-6 p-5 sm:p-6">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-[0.15em] text-foreground/60">
-          CBT Engine Sync
-        </h2>
-        <p className="text-sm text-foreground/60">
-          The 1:1 NTA replica test engine isn't built yet, so there's nothing to sync tests into
-          for real. Every uploaded test above is stored with a <code>cbtEngineSynced: false</code>{" "}
-          flag so a future sync job can pick up exactly which tests still need mapping onto the
-          engine's grid layout once it exists.
-        </p>
-      </div>
-
-      <div className="clay p-5 sm:p-6">
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.15em] text-foreground/60">
-          Uploaded tests
-        </h2>
-        {rows === null ? (
-          <div className="flex justify-center py-6">
-            <Loader2 className="h-5 w-5 animate-spin text-foreground/40" />
-          </div>
-        ) : rows.length === 0 ? (
-          <p className="text-sm text-foreground/60">No tests uploaded yet.</p>
-        ) : (
-          <ul className="space-y-2">
-            {rows.map((r) => (
-              <li key={r.id} className="clay-inset flex items-center justify-between gap-3 px-4 py-3">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{r.title}</p>
-                  <p className="text-xs text-foreground/50">
-                    {r.subject} · {r.totalMarks} marks · {r.timeLimitMinutes} min · {r.track}
-                  </p>
-                </div>
-                <span className="rounded-full bg-foreground/5 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-foreground/50">
-                  {r.cbtEngineSynced ? "Synced" : "Not synced"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Module 3: Student Directory ─────────────────────────────────────────────
+// ─── Module: Student Directory (with 360° profile drawer) ──────────────────
 type StudentRow = {
   uid: string;
   fullName: string;
@@ -439,282 +589,696 @@ type StudentRow = {
   deviceCount: number;
 };
 
+type StudentFullProfile = {
+  profile: {
+    uid: string;
+    fullName: string;
+    email: string | null;
+    mobile: string;
+    city: string;
+    currentClass: string;
+    board: string;
+    targetExam: string;
+    track: string;
+    joinedAt: string | null;
+  };
+  purchases: { itemType: "bundle" | "mentorship"; title: string; amount: number; purchasedAt: string | null }[];
+  batchPerformance: {
+    bundleId: string;
+    bundleTitle: string;
+    testsAttempted: number;
+    totalAttempts: number;
+    averagePercent: number;
+    bestPercent: number;
+  }[];
+  devices: { deviceId: string; deviceLabel: string; ip: string; lastSeenAt: string | null }[];
+  tickets: {
+    id: string;
+    subject: string;
+    message: string;
+    status: string;
+    itemType: "platform" | "bundle" | "mentorship";
+    createdAt: string | null;
+  }[];
+};
+
 function StudentsModule({ adminUser }: { adminUser: { getIdToken: () => Promise<string> } }) {
   const [students, setStudents] = useState<StudentRow[] | null>(null);
-  const [deviceModalUid, setDeviceModalUid] = useState<string | null>(null);
-  const [devices, setDevices] = useState<{ deviceId: string; deviceLabel: string; ip: string; lastSeenAt: string | null }[] | null>(
-    null,
-  );
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [query, setQuery] = useState("");
+  const [openUid, setOpenUid] = useState<string | null>(null);
 
-  useEffect(() => {
-    (async () => {
+  async function load() {
+    setStatus("loading");
+    try {
       const token = await adminUser.getIdToken();
       const { students: rows } = await listStudents({ data: { token } });
       setStudents(rows as StudentRow[]);
-    })();
-  }, [adminUser]);
-
-  async function openDevices(uid: string) {
-    setDeviceModalUid(uid);
-    setDevices(null);
-    const token = await adminUser.getIdToken();
-    const { sessions } = await adminListDevicesForUser({ data: { token, uid } });
-    setDevices(sessions);
+      setStatus("ready");
+    } catch {
+      setStatus("error");
+    }
   }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const filtered = useMemo(() => {
+    if (!students) return [];
+    const q = query.trim().toLowerCase();
+    if (!q) return students;
+    return students.filter((s) => s.fullName?.toLowerCase().includes(q) || s.email?.toLowerCase().includes(q));
+  }, [students, query]);
 
   return (
     <div>
-      <ModuleHeader title="Student Directory" subtitle="All onboarded students across every track." />
+      <ModuleHeader title="Student Directory" subtitle="Every onboarded student — tap a row for the full 360° view." />
 
-      <div className="clay overflow-x-auto p-5 sm:p-6">
-        {students === null ? (
-          <div className="flex justify-center py-6">
-            <Loader2 className="h-5 w-5 animate-spin text-foreground/40" />
+      <div className="clay p-5 sm:p-6">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative w-full sm:max-w-xs">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/30" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by name or email…"
+              className="clay-inset w-full rounded-2xl py-2.5 pl-10 pr-4 text-sm text-foreground placeholder:text-foreground/40 focus:outline-none"
+            />
           </div>
-        ) : students.length === 0 ? (
-          <p className="text-sm text-foreground/60">No students yet.</p>
+          {students && (
+            <span className="shrink-0 text-xs text-foreground/50">
+              {filtered.length} of {students.length} students
+            </span>
+          )}
+        </div>
+
+        {status === "loading" ? (
+          <div className="space-y-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="clay-inset h-14 animate-pulse rounded-2xl bg-foreground/5" />
+            ))}
+          </div>
+        ) : status === "error" ? (
+          <ErrorState message="Couldn't load students." onRetry={load} />
+        ) : students!.length === 0 ? (
+          <EmptyState message="No students yet." />
+        ) : filtered.length === 0 ? (
+          <EmptyState message="No students match your search." />
         ) : (
-          <table className="w-full min-w-[560px] border-separate border-spacing-y-2 text-sm">
-            <thead>
-              <tr className="text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
-                <th className="px-3 pb-1">Name</th>
-                <th className="px-3 pb-1">Track</th>
-                <th className="px-3 pb-1">Target</th>
-                <th className="px-3 pb-1">Devices</th>
-                <th className="px-3 pb-1" />
-              </tr>
-            </thead>
-            <tbody>
-              {students.map((s) => (
-                <tr key={s.uid} className="clay-inset">
-                  <td className="rounded-l-2xl px-3 py-3">
-                    <p className="font-medium text-foreground">{s.fullName || "—"}</p>
-                    <p className="text-xs text-foreground/50">{s.email}</p>
-                  </td>
-                  <td className="px-3 py-3 text-foreground/80">{s.track || "—"}</td>
-                  <td className="px-3 py-3 text-foreground/80">{s.targetExam || "—"}</td>
-                  <td className="px-3 py-3 text-foreground/80">{s.deviceCount}</td>
-                  <td className="rounded-r-2xl px-3 py-3 text-right">
+          <>
+            <div className="hidden overflow-x-auto sm:block">
+              <table className="w-full min-w-[560px] border-separate border-spacing-y-2 text-sm">
+                <thead>
+                  <tr className="text-left text-xs font-semibold uppercase tracking-wide text-foreground/50">
+                    <th className="px-3 pb-1">Name</th>
+                    <th className="px-3 pb-1">Track</th>
+                    <th className="px-3 pb-1">Target</th>
+                    <th className="px-3 pb-1">Devices</th>
+                    <th className="px-3 pb-1" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((s) => (
+                    <tr key={s.uid} className="clay-inset transition-colors duration-200 hover:bg-foreground/5">
+                      <td className="max-w-[220px] rounded-l-2xl px-3 py-3">
+                        <p className="truncate font-medium text-foreground">{s.fullName || "—"}</p>
+                        <p className="truncate text-xs text-foreground/50">{s.email}</p>
+                      </td>
+                      <td className="px-3 py-3 text-foreground/80">{s.track || "—"}</td>
+                      <td className="px-3 py-3 text-foreground/80">{s.targetExam || "—"}</td>
+                      <td className="px-3 py-3 text-foreground/80">{s.deviceCount}</td>
+                      <td className="rounded-r-2xl px-3 py-3 text-right">
+                        <button
+                          onClick={() => setOpenUid(s.uid)}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--sky-deep)] hover:underline"
+                        >
+                          View full profile
+                          <ArrowUpRight className="h-3 w-3" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <ul className="space-y-2 sm:hidden">
+              {filtered.map((s) => (
+                <li key={s.uid} className="clay-inset px-4 py-3">
+                  <p className="truncate text-sm font-semibold text-foreground">{s.fullName || "—"}</p>
+                  <p className="truncate text-xs text-foreground/50">{s.email}</p>
+                  <div className="mt-2 flex items-center justify-between gap-2 text-xs">
+                    <span className="text-foreground/60">
+                      {s.track || "—"} · {s.targetExam || "—"}
+                    </span>
                     <button
-                      onClick={() => openDevices(s.uid)}
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--sky-deep)] hover:underline"
+                      onClick={() => setOpenUid(s.uid)}
+                      className="inline-flex items-center gap-1 font-semibold text-[var(--sky-deep)]"
                     >
-                      <Smartphone className="h-3.5 w-3.5" />
-                      View devices
+                      Full profile <ArrowUpRight className="h-3 w-3" />
                     </button>
-                  </td>
-                </tr>
+                  </div>
+                </li>
               ))}
-            </tbody>
-          </table>
+            </ul>
+          </>
         )}
       </div>
 
-      {deviceModalUid && (
-        <div
-          className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 px-4"
-          onClick={() => setDeviceModalUid(null)}
-        >
-          <div className="clay w-full max-w-md p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-sm font-semibold uppercase tracking-[0.15em] text-foreground/60">
-                Logged-in devices
-              </h3>
-              <button onClick={() => setDeviceModalUid(null)} className="text-foreground/40 hover:text-foreground/70">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            {devices === null ? (
-              <div className="flex justify-center py-6">
-                <Loader2 className="h-5 w-5 animate-spin text-foreground/40" />
-              </div>
-            ) : devices.length === 0 ? (
-              <p className="text-sm text-foreground/60">No devices found.</p>
-            ) : (
-              <ul className="space-y-2">
-                {devices.map((d) => (
-                  <li key={d.deviceId} className="clay-inset px-4 py-3">
-                    <p className="text-sm font-semibold text-foreground">{d.deviceLabel}</p>
-                    <p className="text-xs text-foreground/50">
-                      {d.ip} · {d.lastSeenAt ? new Date(d.lastSeenAt).toLocaleString() : "unknown"}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      )}
+      {openUid && <StudentProfileDrawer uid={openUid} adminUser={adminUser} onClose={() => setOpenUid(null)} />}
     </div>
   );
 }
 
-// ─── Module 4: Mentor Allocation & Schedule Hub ─────────────────────────────
-// (Replaced by MentorHubModule in @/components/mentor-hub-module — mentor
-// onboarding, profile editing, and mentorship batches are now real.)
+function StudentProfileDrawer({
+  uid,
+  adminUser,
+  onClose,
+}: {
+  uid: string;
+  adminUser: { getIdToken: () => Promise<string> };
+  onClose: () => void;
+}) {
+  const [data, setData] = useState<StudentFullProfile | null>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
 
-// ─── Module 5: Announcement Broadcast ───────────────────────────────────────
-type AnnouncementRow = {
-  id: string;
-  message: string;
-  track: string;
-  createdAt: string | null;
-};
-
-function AnnouncementsModule({ adminUser }: { adminUser: { getIdToken: () => Promise<string> } }) {
-  const [rows, setRows] = useState<AnnouncementRow[] | null>(null);
-  const [message, setMessage] = useState("");
-  const [track, setTrack] = useState<"All" | "Dropper" | "11th" | "12th">("All");
-  const [posting, setPosting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function refresh() {
-    const token = await adminUser.getIdToken();
-    const { announcements } = await listAnnouncements({ data: { token } });
-    setRows(announcements as AnnouncementRow[]);
-  }
-
-  useEffect(() => {
-    refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adminUser]);
-
-  async function handlePost(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    if (!message.trim()) return setError("Write a message first.");
-    setPosting(true);
+  async function load() {
+    setStatus("loading");
     try {
       const token = await adminUser.getIdToken();
-      await postAnnouncement({ data: { token, message, track } });
-      setMessage("");
-      await refresh();
+      const result = await getAdminStudentFullProfile({ data: { token, uid } });
+      setData(result as StudentFullProfile);
+      setStatus("ready");
     } catch {
-      setError("Could not post. Try again.");
-    } finally {
-      setPosting(false);
+      setStatus("error");
     }
   }
 
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid]);
+
   return (
-    <div>
-      <ModuleHeader title="Announcement Broadcast" subtitle="Post notices to the student dashboard feed." />
-
-      <div className="clay mb-6 p-5 sm:p-6">
-        <form onSubmit={handlePost} className="space-y-3">
-          <textarea
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="Write your announcement…"
-            rows={3}
-            className="clay-inset w-full rounded-2xl px-4 py-3 text-sm text-foreground placeholder:text-foreground/40 focus:outline-none"
-          />
-          <AdminSelect
-            value={track}
-            onChange={(v) => setTrack(v as typeof track)}
-            options={["All", "Dropper", "11th", "12th"]}
-            label="Send to"
-          />
-          {error && (
-            <p className="rounded-2xl bg-[var(--coral-soft)]/50 px-4 py-2 text-xs font-medium text-foreground">
-              {error}
-            </p>
-          )}
+    <div className="fixed inset-0 z-40 flex justify-end">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="clay relative flex h-full w-full max-w-lg flex-col overflow-y-auto rounded-l-3xl rounded-r-none p-5 sm:p-6">
+        <div className="mb-4 flex items-center justify-between">
           <button
-            type="submit"
-            disabled={posting}
-            className="clay-btn flex items-center justify-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold disabled:opacity-70"
+            onClick={onClose}
+            className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-sm font-semibold text-foreground/60 hover:text-foreground"
           >
-            {posting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Post announcement"}
+            <ArrowLeft className="h-4 w-4" />
+            Close
           </button>
-        </form>
-      </div>
+          <button onClick={onClose} className="text-foreground/40 hover:text-foreground/70 sm:hidden">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
 
-      <div className="clay p-5 sm:p-6">
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.15em] text-foreground/60">
-          Recent announcements
-        </h2>
-        {rows === null ? (
-          <div className="flex justify-center py-6">
-            <Loader2 className="h-5 w-5 animate-spin text-foreground/40" />
+        {status === "loading" ? (
+          <div className="space-y-4">
+            <div className="h-20 animate-pulse rounded-2xl bg-foreground/5" />
+            <div className="h-32 animate-pulse rounded-2xl bg-foreground/5" />
+            <div className="h-32 animate-pulse rounded-2xl bg-foreground/5" />
           </div>
-        ) : rows.length === 0 ? (
-          <p className="text-sm text-foreground/60">Nothing posted yet.</p>
+        ) : status === "error" || !data ? (
+          <ErrorState message="Couldn't load this student's profile." onRetry={load} />
         ) : (
-          <ul className="space-y-2">
-            {rows.map((a) => (
-              <li key={a.id} className="clay-inset px-4 py-3">
-                <div className="mb-1 flex items-center justify-between gap-2">
-                  <span className="rounded-full bg-[var(--sky-soft)] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-foreground">
-                    {a.track}
-                  </span>
-                  <span className="text-xs text-foreground/40">
-                    {a.createdAt ? new Date(a.createdAt).toLocaleString() : ""}
+          <div className="space-y-5">
+            {/* Identity */}
+            <div className="clay-inset p-4">
+              <div className="flex items-center gap-3">
+                <div className="clay flex h-14 w-14 shrink-0 items-center justify-center rounded-full">
+                  <span className="font-display text-xl font-bold text-foreground/60">
+                    {data.profile.fullName.charAt(0).toUpperCase()}
                   </span>
                 </div>
-                <p className="text-sm text-foreground">{a.message}</p>
-              </li>
+                <div className="min-w-0">
+                  <p className="truncate font-display text-lg font-bold text-foreground">{data.profile.fullName}</p>
+                  <p className="text-xs text-foreground/50">Joined {formatDate(data.profile.joinedAt)}</p>
+                </div>
+              </div>
+              <div className="mt-4 space-y-1.5 text-sm text-foreground/70">
+                {data.profile.email && (
+                  <p className="flex items-center gap-2">
+                    <Mail className="h-3.5 w-3.5 shrink-0 text-foreground/40" />
+                    {data.profile.email}
+                  </p>
+                )}
+                {data.profile.mobile && (
+                  <p className="flex items-center gap-2">
+                    <Phone className="h-3.5 w-3.5 shrink-0 text-foreground/40" />
+                    {data.profile.mobile}
+                  </p>
+                )}
+                {data.profile.city && (
+                  <p className="flex items-center gap-2">
+                    <MapPin className="h-3.5 w-3.5 shrink-0 text-foreground/40" />
+                    {data.profile.city}
+                  </p>
+                )}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <span className="clay-chip px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-foreground/70">
+                  Class: {data.profile.currentClass || "—"}
+                </span>
+                <span className="clay-chip px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-foreground/70">
+                  Board: {data.profile.board || "—"}
+                </span>
+                <span className="clay-chip bg-[var(--sky-soft)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-foreground">
+                  Target: {data.profile.targetExam}
+                </span>
+                <span className="clay-chip px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-foreground/70">
+                  Track: {data.profile.track || "—"}
+                </span>
+              </div>
+            </div>
+
+            {/* Purchases */}
+            <DrawerSection icon={ShoppingBag} title={`Purchases (${data.purchases.length})`}>
+              {data.purchases.length === 0 ? (
+                <p className="text-sm text-foreground/60">No purchases yet.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {data.purchases.map((p, i) => (
+                    <li key={i} className="clay-inset flex items-center justify-between gap-2 px-3.5 py-2.5">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-foreground">{p.title}</p>
+                        <p className="text-xs text-foreground/50">{formatDate(p.purchasedAt)}</p>
+                      </div>
+                      <span className="shrink-0 text-sm font-semibold text-foreground/80">
+                        {currency.format(p.amount)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </DrawerSection>
+
+            {/* Performance */}
+            <DrawerSection icon={ClipboardCheck} title="Batch performance">
+              {data.batchPerformance.length === 0 ? (
+                <p className="text-sm text-foreground/60">No test attempts yet.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {data.batchPerformance.map((b) => (
+                    <li key={b.bundleId} className="clay-inset px-3.5 py-3">
+                      <div className="mb-1 flex items-center justify-between gap-2 text-sm">
+                        <span className="truncate font-semibold text-foreground">{b.bundleTitle}</span>
+                        <span className="shrink-0 text-xs text-foreground/50">
+                          {b.testsAttempted} tests · {b.totalAttempts} attempts
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-4 text-xs text-foreground/60">
+                        <span>Avg {b.averagePercent}%</span>
+                        <span>Best {b.bestPercent}%</span>
+                      </div>
+                      <div className="clay-inset mt-2 h-2 overflow-hidden rounded-full">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            b.averagePercent < 40 ? "bg-[var(--coral-soft)]" : "bg-[var(--sky-deep)]"
+                          }`}
+                          style={{ width: `${b.averagePercent}%` }}
+                        />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </DrawerSection>
+
+            {/* Devices */}
+            <DrawerSection icon={Smartphone} title={`Devices (${data.devices.length})`}>
+              {data.devices.length === 0 ? (
+                <p className="text-sm text-foreground/60">No device history.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {data.devices.map((d) => (
+                    <li key={d.deviceId} className="clay-inset px-3.5 py-2.5">
+                      <p className="text-sm font-semibold text-foreground">{d.deviceLabel}</p>
+                      <p className="text-xs text-foreground/50">
+                        {d.ip} · {d.lastSeenAt ? new Date(d.lastSeenAt).toLocaleString() : "unknown"}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </DrawerSection>
+
+            {/* Tickets */}
+            <DrawerSection icon={LifeBuoy} title={`Tickets (${data.tickets.length})`}>
+              {data.tickets.length === 0 ? (
+                <p className="text-sm text-foreground/60">No tickets filed.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {data.tickets.map((t) => (
+                    <li key={t.id} className="clay-inset px-3.5 py-3">
+                      <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                        <SourceBadge itemType={t.itemType} />
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                            t.status === "resolved"
+                              ? "bg-[var(--mint-soft)] text-foreground"
+                              : "bg-[var(--coral-soft)]/60 text-foreground"
+                          }`}
+                        >
+                          {t.status}
+                        </span>
+                      </div>
+                      <p className="text-sm font-semibold text-foreground">{t.subject}</p>
+                      <p className="mt-0.5 text-xs text-foreground/60">{t.message}</p>
+                      <p className="mt-1 text-[11px] text-foreground/40">{formatDateTime(t.createdAt)}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </DrawerSection>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DrawerSection({
+  icon: Icon,
+  title,
+  children,
+}: {
+  icon: typeof ShoppingBag;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="mb-2 flex items-center gap-2">
+        <Icon className="h-4 w-4 text-foreground/50" />
+        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-foreground/50">{title}</h3>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function SourceBadge({ itemType, itemTitle }: { itemType: "platform" | "bundle" | "mentorship"; itemTitle?: string }) {
+  if (itemType === "platform") {
+    return (
+      <span className="rounded-full bg-foreground/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-foreground/60">
+        Platform
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+        itemType === "bundle" ? "bg-[var(--sky-soft)] text-foreground" : "bg-[var(--mint-soft)] text-foreground"
+      }`}
+    >
+      From: {itemTitle ?? (itemType === "bundle" ? "Test series" : "Mentorship batch")}
+    </span>
+  );
+}
+
+// ─── Module: Support Tickets ─────────────────────────────────────────────────
+type AdminTicket = {
+  id: string;
+  uid: string;
+  studentName: string;
+  studentEmail: string | null;
+  studentMobile: string | null;
+  subject: string;
+  message: string;
+  status: string;
+  source: { type: "platform" } | { type: "bundle" | "mentorship"; itemTitle: string };
+  adminReply: string | null;
+  rating: number | null;
+  createdAt: string | null;
+  repliedAt: string | null;
+};
+
+type SourceFilter = "all" | "platform" | "bundle" | "mentorship";
+type StatusFilter = "all" | "open" | "resolved";
+
+function TicketsModule({ adminUser }: { adminUser: { getIdToken: () => Promise<string> } }) {
+  const [tickets, setTickets] = useState<AdminTicket[] | null>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [query, setQuery] = useState("");
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+
+  async function load() {
+    setStatus("loading");
+    try {
+      const token = await adminUser.getIdToken();
+      const { tickets: rows } = await listAllTicketsAdmin({ data: { token } });
+      setTickets(rows as AdminTicket[]);
+      setStatus("ready");
+    } catch {
+      setStatus("error");
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const filtered = useMemo(() => {
+    if (!tickets) return [];
+    const q = query.trim().toLowerCase();
+    return tickets.filter((t) => {
+      if (sourceFilter !== "all" && t.source.type !== sourceFilter) return false;
+      if (statusFilter !== "all" && t.status !== statusFilter) return false;
+      if (q && !(t.studentName.toLowerCase().includes(q) || t.subject.toLowerCase().includes(q))) return false;
+      return true;
+    });
+  }, [tickets, query, sourceFilter, statusFilter]);
+
+  const openCount = tickets?.filter((t) => t.status !== "resolved").length ?? 0;
+
+  return (
+    <div>
+      <ModuleHeader title="Support Tickets" subtitle="Every ticket a student has filed, with where it came from." />
+
+      {tickets && openCount > 0 && (
+        <div className="clay-inset mb-4 flex items-center gap-2 rounded-2xl bg-[var(--coral-soft)]/30 px-4 py-3 text-sm text-foreground/70">
+          <MessageSquareText className="h-4 w-4 shrink-0" />
+          <p>
+            <strong>{openCount}</strong> ticket{openCount !== 1 ? "s" : ""} still open.
+          </p>
+        </div>
+      )}
+
+      <div className="clay p-5 sm:p-6">
+        <div className="mb-4 flex flex-col gap-3">
+          <div className="relative w-full sm:max-w-sm">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/30" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by student or subject…"
+              className="clay-inset w-full rounded-2xl py-2.5 pl-10 pr-4 text-sm text-foreground placeholder:text-foreground/40 focus:outline-none"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(["all", "platform", "bundle", "mentorship"] as SourceFilter[]).map((f) => (
+              <FilterChip key={f} active={sourceFilter === f} onClick={() => setSourceFilter(f)}>
+                {f === "all" ? "All sources" : f === "platform" ? "Platform" : f === "bundle" ? "Test series" : "Mentorship"}
+              </FilterChip>
+            ))}
+            <span className="mx-1 hidden text-foreground/20 sm:inline">|</span>
+            {(["all", "open", "resolved"] as StatusFilter[]).map((f) => (
+              <FilterChip key={f} active={statusFilter === f} onClick={() => setStatusFilter(f)}>
+                {f === "all" ? "All statuses" : f === "open" ? "Open" : "Resolved"}
+              </FilterChip>
+            ))}
+          </div>
+        </div>
+
+        {status === "loading" ? (
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="clay-inset h-32 animate-pulse rounded-2xl bg-foreground/5" />
+            ))}
+          </div>
+        ) : status === "error" ? (
+          <ErrorState message="Couldn't load tickets." onRetry={load} />
+        ) : filtered.length === 0 ? (
+          <EmptyState message={tickets && tickets.length > 0 ? "No tickets match your filters." : "No tickets filed yet."} />
+        ) : (
+          <ul className="space-y-3">
+            {filtered.map((t) => (
+              <AdminTicketCard
+                key={t.id}
+                ticket={t}
+                adminUser={adminUser}
+                onReplied={(reply) =>
+                  setTickets(
+                    (prev) =>
+                      prev?.map((row) =>
+                        row.id === t.id ? { ...row, adminReply: reply, status: "resolved" } : row,
+                      ) ?? null,
+                  )
+                }
+              />
             ))}
           </ul>
         )}
       </div>
-
-      <p className="mt-4 text-xs text-foreground/40">
-        This posts to the <code>announcements</code> collection. The Student Dashboard doesn't
-        read from it yet — that's the natural next step to wire up once you're ready.
-      </p>
     </div>
   );
 }
 
-// ─── Shared small inputs ─────────────────────────────────────────────────────
-function AdminInput({
-  value,
-  onChange,
-  placeholder,
-  inputMode,
+function AdminTicketCard({
+  ticket,
+  adminUser,
+  onReplied,
 }: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-  inputMode?: "text" | "numeric";
+  ticket: AdminTicket;
+  adminUser: { getIdToken: () => Promise<string> };
+  onReplied: (reply: string) => void;
 }) {
+  const [replyDraft, setReplyDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [showReplyBox, setShowReplyBox] = useState(false);
+
+  async function sendReply() {
+    if (!replyDraft.trim()) return;
+    setSending(true);
+    try {
+      const token = await adminUser.getIdToken();
+      await replyToTicket({ data: { token, ticketId: ticket.id, reply: replyDraft } });
+      onReplied(replyDraft.trim());
+      setReplyDraft("");
+      setShowReplyBox(false);
+    } finally {
+      setSending(false);
+    }
+  }
+
   return (
-    <input
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      inputMode={inputMode}
-      className="clay-inset w-full rounded-2xl px-4 py-2.5 text-sm text-foreground placeholder:text-foreground/40 focus:outline-none"
-    />
+    <li className="clay-inset rounded-2xl p-4">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <SourceBadge
+            itemType={ticket.source.type}
+            itemTitle={ticket.source.type !== "platform" ? ticket.source.itemTitle : undefined}
+          />
+          <span
+            className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+              ticket.status === "resolved"
+                ? "bg-[var(--mint-soft)] text-foreground"
+                : "bg-[var(--coral-soft)]/60 text-foreground"
+            }`}
+          >
+            {ticket.status}
+          </span>
+        </div>
+        <span className="text-xs text-foreground/40">{formatDateTime(ticket.createdAt)}</span>
+      </div>
+
+      <p className="text-sm font-semibold text-foreground">{ticket.subject}</p>
+      <p className="mt-1 text-sm text-foreground/70">{ticket.message}</p>
+
+      {/* Contact details — the whole point: reach the student without
+          hunting through the student directory. */}
+      <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-foreground/60">
+        <span className="font-semibold text-foreground">{ticket.studentName}</span>
+        {ticket.studentEmail && (
+          <a
+            href={`mailto:${ticket.studentEmail}`}
+            className="inline-flex items-center gap-1 text-[var(--sky-deep)] hover:underline"
+          >
+            <Mail className="h-3 w-3" />
+            {ticket.studentEmail}
+          </a>
+        )}
+        {ticket.studentMobile && (
+          <a href={`tel:${ticket.studentMobile}`} className="inline-flex items-center gap-1 text-[var(--sky-deep)] hover:underline">
+            <Phone className="h-3 w-3" />
+            {ticket.studentMobile}
+          </a>
+        )}
+        {!ticket.studentEmail && !ticket.studentMobile && (
+          <span className="italic text-foreground/35">No contact details on file (filed before this was tracked)</span>
+        )}
+      </div>
+
+      {ticket.adminReply ? (
+        <div className="clay-inset mt-3 rounded-xl px-4 py-3">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-foreground/40">Your reply</p>
+            {ticket.rating ? (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-foreground/60">
+                <Star className="h-3 w-3 fill-[var(--sky-deep)] text-[var(--sky-deep)]" />
+                Rated {ticket.rating}/5
+              </span>
+            ) : (
+              <span className="text-[10px] text-foreground/35">Awaiting student rating</span>
+            )}
+          </div>
+          <p className="text-sm text-foreground/80">{ticket.adminReply}</p>
+        </div>
+      ) : showReplyBox ? (
+        <div className="mt-3 space-y-2">
+          <textarea
+            value={replyDraft}
+            onChange={(e) => setReplyDraft(e.target.value)}
+            placeholder="Write a reply to the student…"
+            rows={3}
+            className="clay-inset w-full rounded-2xl px-4 py-3 text-sm text-foreground placeholder:text-foreground/40 focus:outline-none"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={sendReply}
+              disabled={sending || !replyDraft.trim()}
+              className="clay-btn inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-transform duration-200 hover:-translate-y-0.5 disabled:opacity-50"
+            >
+              {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+              Send reply & resolve
+            </button>
+            <button
+              onClick={() => setShowReplyBox(false)}
+              className="clay-btn-ghost rounded-full px-4 py-2 text-xs font-semibold"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowReplyBox(true)}
+          className="clay-btn-ghost mt-3 inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-transform duration-200 hover:-translate-y-0.5"
+        >
+          <MessageSquareText className="h-3.5 w-3.5" />
+          Reply to student
+        </button>
+      )}
+    </li>
   );
 }
 
-function AdminSelect({
-  value,
-  onChange,
-  options,
-  label,
+function FilterChip({
+  active,
+  onClick,
+  children,
 }: {
-  value: string;
-  onChange: (v: string) => void;
-  options: string[];
-  label?: string;
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
 }) {
   return (
-    <label className="block">
-      {label && <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-foreground/50">{label}</span>}
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="clay-inset w-full appearance-none rounded-2xl px-4 py-2.5 text-sm text-foreground focus:outline-none"
-      >
-        {options.map((o) => (
-          <option key={o} value={o}>
-            {o}
-          </option>
-        ))}
-      </select>
-    </label>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-200 ${
+        active ? "clay-btn text-white" : "clay-chip text-foreground/70"
+      }`}
+    >
+      {children}
+    </button>
   );
 }

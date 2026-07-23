@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { HelpCircle, ShoppingBag, UserRound, ChevronDown, LogOut, Home } from "lucide-react";
+import { HelpCircle, ShoppingBag, UserRound, ChevronDown, LogOut, Home, LifeBuoy } from "lucide-react";
 import type { User } from "firebase/auth";
 import { signOutUser } from "@/lib/firebase";
 
@@ -116,6 +116,17 @@ export function AppHeader({ user, displayName }: { user: User; displayName?: str
                 >
                   <ShoppingBag className="h-4 w-4" />
                   My purchases
+                </button>
+
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    navigate({ to: "/tickets" });
+                  }}
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium text-foreground/80 transition hover:bg-foreground/5"
+                >
+                  <LifeBuoy className="h-4 w-4" />
+                  My tickets
                 </button>
 
                 <button
