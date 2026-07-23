@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { onAuthStateChanged, type User } from "firebase/auth";
+import { onIdTokenChanged, type User } from "firebase/auth";
 import { auth } from "./firebase";
 
 type AdminClaimState = {
@@ -8,11 +8,6 @@ type AdminClaimState = {
   loading: boolean;
 };
 
-// Separate from the student `useAuth()` context on purpose: this checks the
-// `admin` custom claim on the ID token, which is the actual authorization
-// boundary between a student session and an admin session — not just "is
-// someone logged in." A logged-in student will have adminUser set but
-// isAdmin: false.
 export function useAdminClaim(): AdminClaimState {
   const [state, setState] = useState<AdminClaimState>({
     adminUser: null,
@@ -21,7 +16,7 @@ export function useAdminClaim(): AdminClaimState {
   });
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    const unsubscribe = onIdTokenChanged(auth, async (user) => {
       if (!user) {
         setState({ adminUser: null, isAdmin: false, loading: false });
         return;
