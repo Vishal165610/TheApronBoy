@@ -4,6 +4,7 @@ import {
   Loader2,
   ShieldCheck,
   LayoutDashboard,
+  Trash2,
   Users,
   GraduationCap,
   LogOut,
@@ -35,6 +36,18 @@ import {
   Phone,
   MapPin,
   Star,
+  FileCheck,
+  UserPlus,
+  ThumbsUp,
+  ThumbsDown,
+  Youtube,
+  Instagram,
+  Linkedin,
+  Twitter,
+  Send as SendIcon,
+  Building2,
+  Calendar,
+  Link2,
 } from "lucide-react";
 import { useAdminClaim } from "@/lib/use-admin-claim";
 import { signOutUser } from "@/lib/firebase";
@@ -45,6 +58,14 @@ import {
   listAllTicketsAdmin,
   updateTicketStatus,
   replyToTicket,
+  listCreatorApplications,
+  approveCreatorApplication,
+  rejectCreatorApplication,
+  reopenCreatorApplication,
+  listBundlesForDeletion,
+  listTestCoresForDeletion,
+  deleteBundle,
+  deleteTestCore,
 } from "@/server-functions/admin";
 import { BundleCreationModule, BundleManagementModule } from "@/components/bundle-modules";
 import { TestCoreModule } from "@/components/test-core-module";
@@ -60,7 +81,9 @@ type ModuleKey =
   | "questions"
   | "inspector"
   | "students"
+  | "applications"
   | "mentors"
+  | "dangerZone"
   | "tickets";
 
 type ModuleDef = { key: ModuleKey; label: string; icon: typeof LayoutDashboard };
@@ -85,10 +108,12 @@ const MODULE_GROUPS: { label: string; items: ModuleDef[] }[] = [
     label: "People",
     items: [
       { key: "students", label: "Students", icon: Users },
+      { key: "applications", label: "Applications", icon: FileCheck },
       { key: "mentors", label: "Mentors", icon: GraduationCap },
     ],
   },
   { label: "Support", items: [{ key: "tickets", label: "Tickets", icon: LifeBuoy }] },
+  { label: "Danger Zone", items: [{ key: "dangerZone", label: "Danger Zone", icon: Trash2 }] },
 ];
 
 const MODULE_LOOKUP: Record<ModuleKey, ModuleDef> = Object.fromEntries(
@@ -325,10 +350,14 @@ function ModuleRouter({
       return <BundleInspectorModule adminUser={adminUser} />;
     case "students":
       return <StudentsModule adminUser={adminUser} />;
+    case "applications":
+      return <ApplicationsModule adminUser={adminUser} />;
     case "mentors":
       return <MentorHubModule adminUser={adminUser} />;
     case "tickets":
       return <TicketsModule adminUser={adminUser} />;
+    case "dangerZone":
+      return <DangerZoneModule adminUser={adminUser} />;
     default:
       return null;
   }
@@ -1002,6 +1031,348 @@ function SourceBadge({ itemType, itemTitle }: { itemType: "platform" | "bundle" 
   );
 }
 
+// ─── Module: Creator / Mentor Applications ──────────────────────────────────
+type SocialLink = { platform: string; url: string };
+type ApplicationStatus = "pending" | "approved" | "rejected";
+type Application = {
+  id: string;
+  personal: { fullName: string; email: string; mobileNumber: string; city: string };
+  credentials: { institution: string; yearOfStudy: string; examRank: string };
+  mentorship: { batchTitle: string; targetCategory: string; pricingTier: string };
+  socialLinks: SocialLink[];
+  status: ApplicationStatus;
+  rejectionReason: string | null;
+  reviewedAt: string | null;
+  submittedAt: string | null;
+};
+
+function socialIcon(platform: string) {
+  switch (platform) {
+    case "YouTube":
+      return Youtube;
+    case "Instagram":
+      return Instagram;
+    case "LinkedIn":
+      return Linkedin;
+    case "X (Twitter)":
+      return Twitter;
+    case "Telegram":
+      return SendIcon;
+    default:
+      return Link2;
+  }
+}
+
+type AppStatusFilter = "pending" | "approved" | "rejected" | "all";
+
+function ApplicationsModule({ adminUser }: { adminUser: { getIdToken: () => Promise<string> } }) {
+  const [applications, setApplications] = useState<Application[] | null>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<AppStatusFilter>("pending");
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+
+  async function load() {
+    setStatus("loading");
+    try {
+      const token = await adminUser.getIdToken();
+      const { applications: rows } = await listCreatorApplications({ data: { token } });
+      setApplications(rows as Application[]);
+      setStatus("ready");
+    } catch {
+      setStatus("error");
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleApprove(id: string) {
+    setBusyId(id);
+    try {
+      const token = await adminUser.getIdToken();
+      await approveCreatorApplication({ data: { token, applicationId: id } });
+      setApplications(
+        (prev) =>
+          prev?.map((a) => (a.id === id ? { ...a, status: "approved", rejectionReason: null } : a)) ?? null,
+      );
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleReject(id: string) {
+    if (!rejectReason.trim()) return;
+    setBusyId(id);
+    try {
+      const token = await adminUser.getIdToken();
+      await rejectCreatorApplication({ data: { token, applicationId: id, reason: rejectReason } });
+      setApplications(
+        (prev) =>
+          prev?.map((a) => (a.id === id ? { ...a, status: "rejected", rejectionReason: rejectReason.trim() } : a)) ??
+          null,
+      );
+      setRejectingId(null);
+      setRejectReason("");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleReopen(id: string) {
+    setBusyId(id);
+    try {
+      const token = await adminUser.getIdToken();
+      await reopenCreatorApplication({ data: { token, applicationId: id } });
+      setApplications(
+        (prev) => prev?.map((a) => (a.id === id ? { ...a, status: "pending", rejectionReason: null } : a)) ?? null,
+      );
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const filtered = useMemo(() => {
+    if (!applications) return [];
+    const q = query.trim().toLowerCase();
+    return applications.filter((a) => {
+      if (statusFilter !== "all" && a.status !== statusFilter) return false;
+      if (
+        q &&
+        !a.personal.fullName.toLowerCase().includes(q) &&
+        !a.mentorship.batchTitle.toLowerCase().includes(q) &&
+        !a.credentials.institution.toLowerCase().includes(q)
+      )
+        return false;
+      return true;
+    });
+  }, [applications, query, statusFilter]);
+
+  const pendingCount = applications?.filter((a) => a.status === "pending").length ?? 0;
+
+  return (
+    <div>
+      <ModuleHeader title="Mentor Applications" subtitle="Review creator applications from the public onboarding form." />
+
+      {applications && pendingCount > 0 && (
+        <div className="clay-inset mb-4 flex items-center gap-2 rounded-2xl bg-[var(--sky-soft)]/50 px-4 py-3 text-sm text-foreground/70">
+          <UserPlus className="h-4 w-4 shrink-0" />
+          <p>
+            <strong>{pendingCount}</strong> application{pendingCount !== 1 ? "s" : ""} awaiting review.
+          </p>
+        </div>
+      )}
+
+      <div className="clay p-5 sm:p-6">
+        <div className="mb-4 flex flex-col gap-3">
+          <div className="relative w-full sm:max-w-sm">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/30" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by name, institution, or batch…"
+              className="clay-inset w-full rounded-2xl py-2.5 pl-10 pr-4 text-sm text-foreground placeholder:text-foreground/40 focus:outline-none"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(["pending", "approved", "rejected", "all"] as AppStatusFilter[]).map((f) => (
+              <FilterChip key={f} active={statusFilter === f} onClick={() => setStatusFilter(f)}>
+                {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
+              </FilterChip>
+            ))}
+          </div>
+        </div>
+
+        {status === "loading" ? (
+          <div className="space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="clay-inset h-48 animate-pulse rounded-2xl bg-foreground/5" />
+            ))}
+          </div>
+        ) : status === "error" ? (
+          <ErrorState message="Couldn't load applications." onRetry={load} />
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            message={applications && applications.length > 0 ? "No applications match your filters." : "No applications yet."}
+          />
+        ) : (
+          <ul className="space-y-4">
+            {filtered.map((app) => (
+              <li key={app.id} className="clay-inset rounded-2xl p-4 sm:p-5">
+                {/* Header row */}
+                <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="font-display text-base font-bold text-foreground">{app.personal.fullName}</p>
+                    <p className="mt-0.5 flex items-center gap-1.5 text-xs text-foreground/50">
+                      <Calendar className="h-3 w-3" />
+                      Applied {formatDate(app.submittedAt)}
+                    </p>
+                  </div>
+                  <StatusPill status={app.status} />
+                </div>
+
+                {/* Contact */}
+                <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-foreground/60">
+                  <a href={`mailto:${app.personal.email}`} className="inline-flex items-center gap-1 text-[var(--sky-deep)] hover:underline">
+                    <Mail className="h-3 w-3" />
+                    {app.personal.email}
+                  </a>
+                  <a href={`tel:${app.personal.mobileNumber}`} className="inline-flex items-center gap-1 text-[var(--sky-deep)] hover:underline">
+                    <Phone className="h-3 w-3" />
+                    {app.personal.mobileNumber}
+                  </a>
+                  <span className="inline-flex items-center gap-1">
+                    <MapPin className="h-3 w-3" />
+                    {app.personal.city}
+                  </span>
+                </div>
+
+                {/* Credentials + mentorship intent */}
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="clay px-3.5 py-2.5">
+                    <p className="mb-0.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-foreground/40">
+                      <Building2 className="h-3 w-3" />
+                      Institution
+                    </p>
+                    <p className="truncate text-sm font-semibold text-foreground">{app.credentials.institution}</p>
+                    <p className="text-xs text-foreground/50">
+                      {app.credentials.yearOfStudy} · {app.credentials.examRank}
+                    </p>
+                  </div>
+                  <div className="clay px-3.5 py-2.5">
+                    <p className="mb-0.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-foreground/40">
+                      <GraduationCap className="h-3 w-3" />
+                      Proposed batch
+                    </p>
+                    <p className="truncate text-sm font-semibold text-foreground">{app.mentorship.batchTitle}</p>
+                    <p className="text-xs text-foreground/50">
+                      {app.mentorship.targetCategory} · {app.mentorship.pricingTier}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Social links */}
+                {app.socialLinks.length > 0 && (
+                  <div className="mt-2.5 flex flex-wrap gap-2">
+                    {app.socialLinks.map((l, i) => {
+                      const Icon = socialIcon(l.platform);
+                      const href = /^https?:\/\//i.test(l.url) ? l.url : `https://${l.url}`;
+                      return (
+                        <a
+                          key={i}
+                          href={href}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="clay-chip inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-foreground/70 transition-colors duration-200 hover:text-[var(--sky-deep)]"
+                        >
+                          <Icon className="h-3 w-3" />
+                          {l.platform}
+                        </a>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Rejection reason, if any */}
+                {app.status === "rejected" && app.rejectionReason && (
+                  <div className="clay-inset mt-3 rounded-xl bg-[var(--coral-soft)]/30 px-4 py-3">
+                    <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-foreground/40">
+                      Rejection reason
+                    </p>
+                    <p className="text-sm text-foreground/80">{app.rejectionReason}</p>
+                  </div>
+                )}
+
+                {/* Actions */}
+                {rejectingId === app.id ? (
+                  <div className="mt-3 space-y-2">
+                    <textarea
+                      value={rejectReason}
+                      onChange={(e) => setRejectReason(e.target.value)}
+                      placeholder="Explain why this application is being rejected…"
+                      rows={2}
+                      className="clay-inset w-full rounded-2xl px-4 py-3 text-sm text-foreground placeholder:text-foreground/40 focus:outline-none"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleReject(app.id)}
+                        disabled={busyId === app.id || !rejectReason.trim()}
+                        className="clay-btn inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-transform duration-200 hover:-translate-y-0.5 disabled:opacity-50"
+                      >
+                        {busyId === app.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ThumbsDown className="h-3.5 w-3.5" />}
+                        Confirm rejection
+                      </button>
+                      <button
+                        onClick={() => {
+                          setRejectingId(null);
+                          setRejectReason("");
+                        }}
+                        className="clay-btn-ghost rounded-full px-4 py-2 text-xs font-semibold"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {app.status !== "approved" && (
+                      <button
+                        onClick={() => handleApprove(app.id)}
+                        disabled={busyId === app.id}
+                        className="clay-btn inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-transform duration-200 hover:-translate-y-0.5 disabled:opacity-50"
+                      >
+                        {busyId === app.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ThumbsUp className="h-3.5 w-3.5" />}
+                        Approve
+                      </button>
+                    )}
+                    {app.status !== "rejected" && (
+                      <button
+                        onClick={() => setRejectingId(app.id)}
+                        disabled={busyId === app.id}
+                        className="clay-btn-ghost inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-transform duration-200 hover:-translate-y-0.5 disabled:opacity-50"
+                      >
+                        <ThumbsDown className="h-3.5 w-3.5" />
+                        Reject
+                      </button>
+                    )}
+                    {app.status !== "pending" && (
+                      <button
+                        onClick={() => handleReopen(app.id)}
+                        disabled={busyId === app.id}
+                        className="clay-btn-ghost inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-transform duration-200 hover:-translate-y-0.5 disabled:opacity-50"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        Reopen
+                      </button>
+                    )}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StatusPill({ status }: { status: ApplicationStatus }) {
+  const styles: Record<ApplicationStatus, string> = {
+    pending: "bg-[var(--sky-soft)] text-foreground",
+    approved: "bg-[var(--mint-soft)] text-foreground",
+    rejected: "bg-[var(--coral-soft)]/60 text-foreground",
+  };
+  return (
+    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${styles[status]}`}>
+      {status}
+    </span>
+  );
+}
+
 // ─── Module: Support Tickets ─────────────────────────────────────────────────
 type AdminTicket = {
   id: string;
@@ -1269,7 +1640,8 @@ function FilterChip({
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
-}) {
+})
+ {
   return (
     <button
       type="button"
@@ -1280,5 +1652,219 @@ function FilterChip({
     >
       {children}
     </button>
+  );
+}
+
+// ─── Module: Danger Zone — cascade-safe deletion ────────────────────────────
+type DeletableBundle = { id: string; title: string; track: string; testCount: number; purchaseCount: number };
+type DeletableTestCore = { id: string; name: string; bundleTitle: string; questionCount: number; attemptCount: number };
+
+function DangerZoneModule({ adminUser }: { adminUser: { getIdToken: () => Promise<string> } }) {
+  const [tab, setTab] = useState<"bundles" | "tests">("bundles");
+  const [bundles, setBundles] = useState<DeletableBundle[] | null>(null);
+  const [testCores, setTestCores] = useState<DeletableTestCore[] | null>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [target, setTarget] = useState<{ kind: "bundle" | "test"; id: string; label: string } | null>(null);
+
+  async function load() {
+    setStatus("loading");
+    try {
+      const token = await adminUser.getIdToken();
+      const [{ bundles: b }, { testCores: t }] = await Promise.all([
+        listBundlesForDeletion({ data: { token } }),
+        listTestCoresForDeletion({ data: { token } }),
+      ]);
+      setBundles(b as DeletableBundle[]);
+      setTestCores(t as DeletableTestCore[]);
+      setStatus("ready");
+    } catch {
+      setStatus("error");
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function confirmDelete() {
+    if (!target) return;
+    const token = await adminUser.getIdToken();
+    if (target.kind === "bundle") {
+      await deleteBundle({ data: { token, bundleId: target.id } });
+      setBundles((prev) => prev?.filter((b) => b.id !== target.id) ?? null);
+    } else {
+      await deleteTestCore({ data: { token, testId: target.id } });
+      setTestCores((prev) => prev?.filter((t) => t.id !== target.id) ?? null);
+    }
+    setTarget(null);
+  }
+
+  return (
+    <div>
+      <ModuleHeader
+        title="Danger Zone"
+        subtitle="Permanently delete bundles and test series — every dependent record goes with them."
+      />
+
+      <div className="clay-inset mb-4 flex items-start gap-2 rounded-2xl bg-[var(--coral-soft)]/30 px-4 py-3 text-sm text-foreground/70">
+        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+        <p>
+          Deleting a bundle removes every test, question, purchase, and student attempt tied to it.
+          This cannot be undone. Deleting a test series removes its questions and every student's
+          attempts on it.
+        </p>
+      </div>
+
+      <div className="mb-4 flex gap-2">
+        <FilterChip active={tab === "bundles"} onClick={() => setTab("bundles")}>
+          Bundles {bundles ? `(${bundles.length})` : ""}
+        </FilterChip>
+        <FilterChip active={tab === "tests"} onClick={() => setTab("tests")}>
+          Test Series {testCores ? `(${testCores.length})` : ""}
+        </FilterChip>
+      </div>
+
+      <div className="clay p-5 sm:p-6">
+        {status === "loading" ? (
+          <div className="space-y-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="clay-inset h-16 animate-pulse rounded-2xl bg-foreground/5" />
+            ))}
+          </div>
+        ) : status === "error" ? (
+          <ErrorState message="Couldn't load deletable items." onRetry={load} />
+        ) : tab === "bundles" ? (
+          !bundles || bundles.length === 0 ? (
+            <EmptyState message="No bundles exist." />
+          ) : (
+            <ul className="space-y-2">
+              {bundles.map((b) => (
+                <li key={b.id} className="clay-inset flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-foreground">{b.title}</p>
+                    <p className="text-xs text-foreground/50">
+                      {b.track || "No track"} · {b.testCount} test{b.testCount !== 1 ? "s" : ""} ·{" "}
+                      {b.purchaseCount} purchase{b.purchaseCount !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setTarget({ kind: "bundle", id: b.id, label: b.title })}
+                    className="clay-btn-ghost inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold text-[var(--coral-soft)] transition-transform duration-200 hover:-translate-y-0.5"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )
+        ) : !testCores || testCores.length === 0 ? (
+          <EmptyState message="No test series exist." />
+        ) : (
+          <ul className="space-y-2">
+            {testCores.map((t) => (
+              <li key={t.id} className="clay-inset flex items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-foreground">{t.name}</p>
+                  <p className="text-xs text-foreground/50">
+                    {t.bundleTitle} · {t.questionCount} question{t.questionCount !== 1 ? "s" : ""} ·{" "}
+                    {t.attemptCount} attempt{t.attemptCount !== 1 ? "s" : ""}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setTarget({ kind: "test", id: t.id, label: t.name })}
+                  className="clay-btn-ghost inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold text-[var(--coral-soft)] transition-transform duration-200 hover:-translate-y-0.5"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {target && (
+        <ConfirmDeleteDialog
+          label={target.label}
+          kind={target.kind}
+          onCancel={() => setTarget(null)}
+          onConfirm={confirmDelete}
+        />
+      )}
+    </div>
+  );
+}
+
+function ConfirmDeleteDialog({
+  label,
+  kind,
+  onCancel,
+  onConfirm,
+}: {
+  label: string;
+  kind: "bundle" | "test";
+  onCancel: () => void;
+  onConfirm: () => Promise<void>;
+}) {
+  const [typed, setTyped] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const matches = typed.trim() === label.trim();
+
+  async function handleConfirm() {
+    if (!matches) return;
+    setDeleting(true);
+    try {
+      await onConfirm();
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={onCancel}>
+      <div className="clay w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center gap-2">
+          <div className="clay-inset grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[var(--coral-soft)]/40">
+            <AlertCircle className="h-5 w-5 text-foreground/70" />
+          </div>
+          <div>
+            <h3 className="font-display text-base font-bold text-foreground">
+              Delete this {kind === "bundle" ? "bundle" : "test series"}?
+            </h3>
+            <p className="text-xs text-foreground/50">This action is permanent and cannot be undone.</p>
+          </div>
+        </div>
+
+        <p className="mb-3 text-sm text-foreground/70">
+          Type <strong className="text-foreground">{label}</strong> below to confirm.
+        </p>
+        <input
+          autoFocus
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+          placeholder={label}
+          className="clay-inset w-full rounded-2xl px-4 py-2.5 text-sm text-foreground placeholder:text-foreground/30 focus:outline-none"
+        />
+
+        <div className="mt-5 flex gap-2">
+          <button
+            onClick={handleConfirm}
+            disabled={!matches || deleting}
+            className="clay-btn inline-flex items-center gap-1.5 rounded-full bg-[var(--coral-soft)] px-5 py-2.5 text-sm font-semibold text-foreground transition-transform duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            Delete permanently
+          </button>
+          <button
+            onClick={onCancel}
+            className="clay-btn-ghost rounded-full px-5 py-2.5 text-sm font-semibold"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

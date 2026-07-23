@@ -1,4 +1,7 @@
 // SERVER-ONLY. Never import this from a component or client-side file.
+import dns from "node:dns";
+dns.setServers(["8.8.8.8", "1.1.1.1"]);
+
 import { MongoClient, type Db } from "mongodb";
 
 const uri = process.env.MONGODB_URI;

@@ -15,20 +15,32 @@ import {
   Loader2,
   CheckCircle2,
   Sparkles,
+  Link2,
+  Youtube,
+  Instagram,
+  Linkedin,
+  Twitter,
+  Send,
+  Plus,
+  Trash2,
 } from "lucide-react";
+import { submitCreatorApplication } from "@/server-functions/mentor-applications";
 
 export const Route = createFileRoute("/join-mentor")({
   component: JoinMentorPage,
 });
-
-// Shared with the main site header/footer — keep in sync if the asset moves.
-const LOGO_SRC = "/assets/branding/edurack-logo.png";
 
 // ---------------------------------------------
 // Types
 // ---------------------------------------------
 
 type StudentCategory = "Droppers" | "12th" | "11th";
+type SocialPlatform = "YouTube" | "Instagram" | "LinkedIn" | "X (Twitter)" | "Telegram" | "Other";
+
+interface SocialLinkField {
+  platform: SocialPlatform;
+  url: string;
+}
 
 interface CreatorApplicationForm {
   fullName: string;
@@ -41,6 +53,7 @@ interface CreatorApplicationForm {
   batchTitle: string;
   targetCategory: StudentCategory | "";
   pricingTier: string;
+  socialLinks: SocialLinkField[];
 }
 
 const initialFormState: CreatorApplicationForm = {
@@ -54,9 +67,35 @@ const initialFormState: CreatorApplicationForm = {
   batchTitle: "",
   targetCategory: "",
   pricingTier: "",
+  socialLinks: [{ platform: "YouTube", url: "" }],
 };
 
 const categories: StudentCategory[] = ["Droppers", "12th", "11th"];
+const socialPlatforms: SocialPlatform[] = ["YouTube", "Instagram", "LinkedIn", "X (Twitter)", "Telegram", "Other"];
+const MAX_SOCIAL_LINKS = 5;
+
+function platformIcon(platform: SocialPlatform) {
+  switch (platform) {
+    case "YouTube":
+      return Youtube;
+    case "Instagram":
+      return Instagram;
+    case "LinkedIn":
+      return Linkedin;
+    case "X (Twitter)":
+      return Twitter;
+    case "Telegram":
+      return Send;
+    default:
+      return Link2;
+  }
+}
+
+// A permissive check — good enough to catch "obviously not a link" without
+// rejecting handles or domains typed without a scheme.
+function looksLikeLink(value: string) {
+  return /^(https?:\/\/)?[\w-]+\.[a-z]{2,}(\/\S*)?$/i.test(value.trim());
+}
 
 // ---------------------------------------------
 // Page
@@ -67,15 +106,42 @@ function JoinMentorPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof CreatorApplicationForm, string>>>({});
+  const [socialErrors, setSocialErrors] = useState<Record<number, string>>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  function updateField<K extends keyof CreatorApplicationForm>(
-    field: K,
-    value: CreatorApplicationForm[K],
-  ) {
+  function updateField<K extends keyof CreatorApplicationForm>(field: K, value: CreatorApplicationForm[K]) {
     setForm((prev) => ({ ...prev, [field]: value }));
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: undefined }));
     }
+  }
+
+  function updateSocialLink(index: number, patch: Partial<SocialLinkField>) {
+    setForm((prev) => ({
+      ...prev,
+      socialLinks: prev.socialLinks.map((l, i) => (i === index ? { ...l, ...patch } : l)),
+    }));
+    if (socialErrors[index]) {
+      setSocialErrors((prev) => {
+        const next = { ...prev };
+        delete next[index];
+        return next;
+      });
+    }
+  }
+
+  function addSocialLink() {
+    if (form.socialLinks.length >= MAX_SOCIAL_LINKS) return;
+    setForm((prev) => ({ ...prev, socialLinks: [...prev.socialLinks, { platform: "Instagram", url: "" }] }));
+  }
+
+  function removeSocialLink(index: number) {
+    setForm((prev) => ({ ...prev, socialLinks: prev.socialLinks.filter((_, i) => i !== index) }));
+    setSocialErrors((prev) => {
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
   }
 
   function validate(): boolean {
@@ -92,54 +158,60 @@ function JoinMentorPage() {
     if (!form.targetCategory) nextErrors.targetCategory = "Select a target category.";
     if (!form.pricingTier.trim()) nextErrors.pricingTier = "Pricing tier is required.";
 
+    // Social links are optional overall, but any row with text typed in
+    // should look like an actual link, not a stray character.
+    const nextSocialErrors: Record<number, string> = {};
+    form.socialLinks.forEach((link, i) => {
+      const trimmed = link.url.trim();
+      if (trimmed && !looksLikeLink(trimmed)) {
+        nextSocialErrors[i] = "Doesn't look like a valid link.";
+      }
+    });
+
     setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
+    setSocialErrors(nextSocialErrors);
+    return Object.keys(nextErrors).length === 0 && Object.keys(nextSocialErrors).length === 0;
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    setSubmitError(null);
     if (!validate()) return;
 
     setSubmitting(true);
-
-    // NOTE: this payload shape is what will be handed to the
-    // creator-applications MongoDB collection once the server
-    // function (e.g. `submitCreatorApplication`) is wired up.
-    const payload = {
-      personal: {
-        fullName: form.fullName,
-        email: form.email,
-        mobileNumber: form.mobileNumber,
-        city: form.city,
-      },
-      credentials: {
-        institution: form.institution,
-        yearOfStudy: form.yearOfStudy,
-        examRank: form.examRank,
-      },
-      mentorship: {
-        batchTitle: form.batchTitle,
-        targetCategory: form.targetCategory,
-        pricingTier: form.pricingTier,
-      },
-      submittedAt: new Date().toISOString(),
-    };
-
     try {
-      // await submitCreatorApplication(payload);
-      await new Promise((resolve) => setTimeout(resolve, 1400)); // simulated latency
-      console.log("Creator application payload ready for MongoDB:", payload);
+      await submitCreatorApplication({
+        data: {
+          fullName: form.fullName,
+          email: form.email,
+          mobileNumber: form.mobileNumber,
+          city: form.city,
+          institution: form.institution,
+          yearOfStudy: form.yearOfStudy,
+          examRank: form.examRank,
+          batchTitle: form.batchTitle,
+          targetCategory: form.targetCategory as StudentCategory,
+          pricingTier: form.pricingTier,
+          socialLinks: form.socialLinks,
+        },
+      });
       setSubmitted(true);
     } catch (err) {
-      console.error("Failed to submit creator application", err);
-      setErrors({ fullName: "Something went wrong. Please try again." });
+      setSubmitError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
       setSubmitting(false);
     }
   }
 
   if (submitted) {
-    return <SuccessState onReset={() => { setForm(initialFormState); setSubmitted(false); }} />;
+    return (
+      <SuccessState
+        onReset={() => {
+          setForm(initialFormState);
+          setSubmitted(false);
+        }}
+      />
+    );
   }
 
   return (
@@ -162,11 +234,7 @@ function JoinMentorPage() {
         </div>
 
         <form onSubmit={handleSubmit} noValidate className="clay mt-10 p-6 sm:p-10">
-          <FormSection
-            icon={User}
-            title="Personal Details"
-            subtitle="How students and our team can reach you."
-          >
+          <FormSection icon={User} title="Personal Details" subtitle="How students and our team can reach you.">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <TextField
                 label="Full Name"
@@ -260,18 +328,16 @@ function JoinMentorPage() {
               />
 
               <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  Target Student Category
-                </label>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">Target Student Category</label>
                 <div className="clay-inset flex gap-1 p-1">
                   {categories.map((cat) => (
                     <button
                       key={cat}
                       type="button"
                       onClick={() => updateField("targetCategory", cat)}
-                      className={`flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+                      className={`flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200 ${
                         form.targetCategory === cat
-                          ? "clay-btn text-slate-900"
+                          ? "clay-btn text-white"
                           : "text-slate-500 hover:text-slate-700"
                       }`}
                     >
@@ -294,6 +360,88 @@ function JoinMentorPage() {
               />
             </div>
           </FormSection>
+
+          <Divider />
+
+          <FormSection
+            icon={Link2}
+            title="Online Presence"
+            subtitle="Where students can already find your content — optional, but it speeds up review."
+          >
+            <div className="space-y-3">
+              {form.socialLinks.map((link, index) => {
+                const Icon = platformIcon(link.platform);
+                return (
+                  <div key={index} className="flex flex-col gap-2 sm:flex-row sm:items-start">
+                    <div className="relative sm:w-40 sm:shrink-0">
+                      <select
+                        value={link.platform}
+                        onChange={(e) => updateSocialLink(index, { platform: e.target.value as SocialPlatform })}
+                        className="clay-inset w-full appearance-none rounded-2xl px-4 py-3 pr-9 text-sm text-slate-900 focus:outline-none"
+                      >
+                        {socialPlatforms.map((p) => (
+                          <option key={p} value={p}>
+                            {p}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex-1">
+                      <div className="clay-inset flex items-center gap-2.5 px-4 py-3">
+                        <Icon className="h-4 w-4 shrink-0 text-slate-400" />
+                        <input
+                          type="text"
+                          value={link.url}
+                          onChange={(e) => updateSocialLink(index, { url: e.target.value })}
+                          placeholder={
+                            link.platform === "YouTube"
+                              ? "youtube.com/@yourchannel"
+                              : link.platform === "Instagram"
+                                ? "instagram.com/yourhandle"
+                                : link.platform === "LinkedIn"
+                                  ? "linkedin.com/in/yourname"
+                                  : link.platform === "Telegram"
+                                    ? "t.me/yourchannel"
+                                    : "https://…"
+                          }
+                          className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                        />
+                        {form.socialLinks.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeSocialLink(index)}
+                            aria-label="Remove link"
+                            className="shrink-0 text-slate-300 transition-colors duration-200 hover:text-rose-500"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                      {socialErrors[index] && (
+                        <p className="mt-1.5 text-xs font-medium text-rose-600">{socialErrors[index]}</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {form.socialLinks.length < MAX_SOCIAL_LINKS && (
+                <button
+                  type="button"
+                  onClick={addSocialLink}
+                  className="clay-btn-ghost inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-transform duration-200 hover:-translate-y-0.5"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add another link
+                </button>
+              )}
+            </div>
+          </FormSection>
+
+          {submitError && (
+            <p className="mt-6 rounded-2xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{submitError}</p>
+          )}
 
           <div className="mt-8 flex flex-col items-center gap-3 border-t border-slate-200/70 pt-6 sm:flex-row sm:justify-between">
             <p className="text-xs text-slate-500 sm:max-w-xs">
@@ -331,15 +479,12 @@ function JoinMentorPage() {
 function BrandHeader() {
   return (
     <Link to="/" className="flex items-center justify-center gap-3">
-      {/* Platform logo — sourced from direct Postimg URL */}
       <img
         src="https://i.postimg.cc/4NvD69v0/image-removebg-preview.png"
         alt="EDURACK"
         className="h-10 w-auto shrink-0 object-contain sm:h-12"
       />
-      <span className="font-display text-xl font-bold tracking-tight text-slate-900">
-        EDURACK
-      </span>
+      <span className="font-display text-xl font-bold tracking-tight text-slate-900">EDURACK</span>
     </Link>
   );
 }
@@ -419,12 +564,10 @@ function SuccessState({ onReset }: { onReset: () => void }) {
         <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-teal-100">
           <CheckCircle2 className="h-8 w-8 text-teal-600" />
         </div>
-        <h2 className="mt-5 font-display text-xl font-bold text-slate-900">
-          Application Received
-        </h2>
+        <h2 className="mt-5 font-display text-xl font-bold text-slate-900">Application Received</h2>
         <p className="mt-2 text-sm text-slate-600">
-          Thanks for applying to mentor on EDURACK. Our team will review your
-          details and get back to you at the email you provided.
+          Thanks for applying to mentor on EDURACK. Our team will review your details and get back
+          to you at the email you provided.
         </p>
         <div className="mt-6 flex flex-col items-center gap-2 sm:flex-row sm:justify-center sm:gap-3">
           <button onClick={onReset} className="clay-btn-ghost px-6 py-3 text-sm font-semibold">

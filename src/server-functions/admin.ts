@@ -943,9 +943,6 @@ export const listAllTicketsAdmin = createServerFn({ method: "GET" })
     };
   });
 
-// ─── New: writing a reply is now what resolves a ticket — a status flip
-// with nothing attached wasn't answering the student's question, and gave
-// them nothing to rate.
 export const replyToTicket = createServerFn({ method: "POST" })
   .validator((data: { token: string; ticketId: string; reply: string }) => data)
   .handler(async ({ data }) => {
@@ -970,5 +967,212 @@ export const updateTicketStatus = createServerFn({ method: "POST" })
     await db
       .collection("supportTickets")
       .updateOne({ _id: new ObjectId(data.ticketId) }, { $set: { status: data.status } });
+    return { ok: true };
+  });
+
+  // ─── New: Creator/Mentor application review ─────────────────────────────────
+type SocialLink = { platform: string; url: string };
+
+export const listCreatorApplications = createServerFn({ method: "GET" })
+  .validator((data: { token: string }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin(data.token);
+    const db = await getDb();
+
+    const rows = await db.collection("creatorApplications").find({}).sort({ submittedAt: -1 }).toArray();
+
+    return {
+      applications: rows.map((r) => ({
+        id: String(r._id),
+        personal: r.personal as { fullName: string; email: string; mobileNumber: string; city: string },
+        credentials: r.credentials as { institution: string; yearOfStudy: string; examRank: string },
+        mentorship: r.mentorship as { batchTitle: string; targetCategory: string; pricingTier: string },
+        socialLinks: (r.socialLinks ?? []) as SocialLink[],
+        status: (r.status as "pending" | "approved" | "rejected") ?? "pending",
+        rejectionReason: (r.rejectionReason as string) ?? null,
+        reviewedAt: r.reviewedAt instanceof Date ? r.reviewedAt.toISOString() : null,
+        submittedAt: r.submittedAt instanceof Date ? r.submittedAt.toISOString() : null,
+      })),
+    };
+  });
+
+export const approveCreatorApplication = createServerFn({ method: "POST" })
+  .validator((data: { token: string; applicationId: string }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin(data.token);
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+
+    await db.collection("creatorApplications").updateOne(
+      { _id: new ObjectId(data.applicationId) },
+      { $set: { status: "approved", rejectionReason: null, reviewedAt: new Date() } },
+    );
+
+   
+    return { ok: true };
+  });
+
+export const rejectCreatorApplication = createServerFn({ method: "POST" })
+  .validator((data: { token: string; applicationId: string; reason: string }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin(data.token);
+    if (!data.reason.trim()) throw new Error("A rejection reason is required.");
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+
+    await db.collection("creatorApplications").updateOne(
+      { _id: new ObjectId(data.applicationId) },
+      { $set: { status: "rejected", rejectionReason: data.reason.trim(), reviewedAt: new Date() } },
+    );
+    return { ok: true };
+  });
+
+// Lets an admin undo a decision without losing history — flips back to
+// pending so it reappears in the review queue.
+export const reopenCreatorApplication = createServerFn({ method: "POST" })
+  .validator((data: { token: string; applicationId: string }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin(data.token);
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+    await db.collection("creatorApplications").updateOne(
+      { _id: new ObjectId(data.applicationId) },
+      { $set: { status: "pending", rejectionReason: null, reviewedAt: null } },
+    );
+    return { ok: true };
+  });
+
+  // ─── Danger Zone: cascade-safe deletion for bundles and test series ────────
+// Every delete here removes the full dependency chain, not just the top
+// document — leaving orphaned questions/attempts behind would silently
+// break joins elsewhere (student performance views, leaderboards, etc.)
+// that assume a referenced bundleId/testId still exists.
+
+export const listBundlesForDeletion = createServerFn({ method: "GET" })
+  .validator((data: { token: string }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin(data.token);
+    const db = await getDb();
+
+    const bundles = await db.collection("bundles").find({}).sort({ title: 1 }).toArray();
+    const bundleIds = bundles.map((b) => String(b._id));
+
+    const [testCores, purchases] = await Promise.all([
+      db.collection("testCores").find({ bundleId: { $in: bundleIds } }).toArray(),
+      db.collection("purchases").find({ itemType: "bundle", itemId: { $in: bundleIds } }).toArray(),
+    ]);
+
+    const testCountByBundle = new Map<string, number>();
+    for (const t of testCores) {
+      const id = t.bundleId as string;
+      testCountByBundle.set(id, (testCountByBundle.get(id) ?? 0) + 1);
+    }
+    const purchaseCountByBundle = new Map<string, number>();
+    for (const p of purchases) {
+      const id = p.itemId as string;
+      purchaseCountByBundle.set(id, (purchaseCountByBundle.get(id) ?? 0) + 1);
+    }
+
+    return {
+      bundles: bundles.map((b) => ({
+        id: String(b._id),
+        title: b.title as string,
+        track: (b.track as string) ?? "",
+        testCount: testCountByBundle.get(String(b._id)) ?? 0,
+        purchaseCount: purchaseCountByBundle.get(String(b._id)) ?? 0,
+      })),
+    };
+  });
+
+export const deleteBundle = createServerFn({ method: "POST" })
+  .validator((data: { token: string; bundleId: string }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin(data.token);
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+
+    const bundle = await db.collection("bundles").findOne({ _id: new ObjectId(data.bundleId) });
+    if (!bundle) throw new Error("Bundle not found.");
+
+    const testCores = await db.collection("testCores").find({ bundleId: data.bundleId }).toArray();
+    const testIds = testCores.map((t) => String(t._id));
+
+    // Order matters: children before parents, so a failure partway through
+    // never leaves a bundle deleted while its questions/attempts survive
+    // as orphans (or vice versa) — questions/attempts reference testId,
+    // so they must go before the test cores that own them.
+    if (testIds.length > 0) {
+      await db.collection("questions").deleteMany({ testId: { $in: testIds } });
+      await db.collection("testAttempts").deleteMany({ testId: { $in: testIds } });
+      await db.collection("testCores").deleteMany({ bundleId: data.bundleId });
+    }
+    await db.collection("purchases").deleteMany({ itemType: "bundle", itemId: data.bundleId });
+    await db.collection("bundles").deleteOne({ _id: new ObjectId(data.bundleId) });
+
+    return {
+      ok: true,
+      deleted: {
+        testCores: testIds.length,
+        purchases: await db
+          .collection("purchases")
+          .countDocuments({ itemType: "bundle", itemId: data.bundleId })
+          .then(() => 0), // already deleted above; count reported client-side pre-delete instead
+      },
+    };
+  });
+
+export const listTestCoresForDeletion = createServerFn({ method: "GET" })
+  .validator((data: { token: string }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin(data.token);
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+
+    const testCores = await db.collection("testCores").find({}).sort({ name: 1 }).toArray();
+    const bundleIds = Array.from(new Set(testCores.map((t) => t.bundleId as string).filter(Boolean)));
+    const bundles = bundleIds.length
+      ? await db.collection("bundles").find({ _id: { $in: bundleIds.map((id) => new ObjectId(id)) } }).toArray()
+      : [];
+    const bundleTitleById = new Map(bundles.map((b) => [String(b._id), b.title as string]));
+
+    const testIds = testCores.map((t) => String(t._id));
+    const [questionCounts, attemptCounts] = await Promise.all([
+      db.collection("questions").aggregate([
+        { $match: { testId: { $in: testIds } } },
+        { $group: { _id: "$testId", count: { $sum: 1 } } },
+      ]).toArray(),
+      db.collection("testAttempts").aggregate([
+        { $match: { testId: { $in: testIds } } },
+        { $group: { _id: "$testId", count: { $sum: 1 } } },
+      ]).toArray(),
+    ]);
+    const questionCountByTest = new Map(questionCounts.map((r) => [r._id as string, r.count as number]));
+    const attemptCountByTest = new Map(attemptCounts.map((r) => [r._id as string, r.count as number]));
+
+    return {
+      testCores: testCores.map((t) => ({
+        id: String(t._id),
+        name: t.name as string,
+        bundleTitle: bundleTitleById.get(t.bundleId as string) ?? "Unassigned",
+        questionCount: questionCountByTest.get(String(t._id)) ?? 0,
+        attemptCount: attemptCountByTest.get(String(t._id)) ?? 0,
+      })),
+    };
+  });
+
+export const deleteTestCore = createServerFn({ method: "POST" })
+  .validator((data: { token: string; testId: string }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin(data.token);
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+
+    const test = await db.collection("testCores").findOne({ _id: new ObjectId(data.testId) });
+    if (!test) throw new Error("Test not found.");
+
+    await db.collection("questions").deleteMany({ testId: data.testId });
+    await db.collection("testAttempts").deleteMany({ testId: data.testId });
+    await db.collection("testCores").deleteOne({ _id: new ObjectId(data.testId) });
+
     return { ok: true };
   });
