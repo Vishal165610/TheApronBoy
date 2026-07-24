@@ -30,9 +30,9 @@ export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
       { title: "Sign in · Edurack" },
-      { name: "description", content: "Sign in or create your Edurack account to access the NEET CBT engine, smart dashboards and mentor ecosystem." },
+      { name: "description", content: "Sign in or create your Edurack account to access the NEET, JEE, CUET & IPMAT CBT engines, smart dashboards and mentor ecosystem." },
       { property: "og:title", content: "Sign in · Edurack" },
-      { property: "og:description", content: "Access your NEET prep dashboard on Edurack." },
+      { property: "og:description", content: "Access your NEET, JEE, CUET & IPMAT prep dashboard on Edurack." },
       { name: "robots", content: "noindex" },
     ],
   }),
@@ -221,7 +221,7 @@ function AuthCard({
         </h1>
         <p className="mt-1 text-sm text-foreground/60">
           {tab === "signin"
-            ? "Log in to continue your NEET journey."
+            ? "Log in to continue your exam prep."
             : "Start with Google or an email in seconds."}
         </p>
       </div>
@@ -948,9 +948,20 @@ function OnboardingCard({ onComplete }: { onComplete: () => void }) {
               value={profile.targetExam}
               onChange={(e) => set("targetExam", e.target.value)}
             >
-              <option>NEET</option>
-              <option>NEET + AIIMS</option>
-              <option>NEET PG (future)</option>
+              <optgroup label="NEET">
+                <option>NEET</option>
+                <option>NEET + AIIMS</option>
+              </optgroup>
+              <optgroup label="JEE">
+                <option>JEE Main</option>
+                <option>JEE Main + Advanced</option>
+              </optgroup>
+              <optgroup label="CUET">
+                <option>CUET (UG)</option>
+              </optgroup>
+              <optgroup label="IPMAT">
+                <option>IPMAT</option>
+              </optgroup>
             </ClaySelect>
 
             <div>

@@ -23,6 +23,8 @@ import {
   Send,
   Plus,
   Trash2,
+  Check,
+  BookMarked,
 } from "lucide-react";
 import { submitCreatorApplication } from "@/server-functions/mentor-applications";
 
@@ -36,6 +38,7 @@ export const Route = createFileRoute("/join-mentor")({
 
 type StudentCategory = "Droppers" | "12th" | "11th";
 type SocialPlatform = "YouTube" | "Instagram" | "LinkedIn" | "X (Twitter)" | "Telegram" | "Other";
+type ExamKey = "neet" | "jee" | "cuet" | "ipmat";
 
 interface SocialLinkField {
   platform: SocialPlatform;
@@ -50,6 +53,7 @@ interface CreatorApplicationForm {
   institution: string;
   yearOfStudy: string;
   examRank: string;
+  examsTaught: ExamKey[];
   batchTitle: string;
   targetCategory: StudentCategory | "";
   pricingTier: string;
@@ -64,6 +68,7 @@ const initialFormState: CreatorApplicationForm = {
   institution: "",
   yearOfStudy: "",
   examRank: "",
+  examsTaught: [],
   batchTitle: "",
   targetCategory: "",
   pricingTier: "",
@@ -72,6 +77,12 @@ const initialFormState: CreatorApplicationForm = {
 
 const categories: StudentCategory[] = ["Droppers", "12th", "11th"];
 const socialPlatforms: SocialPlatform[] = ["YouTube", "Instagram", "LinkedIn", "X (Twitter)", "Telegram", "Other"];
+const examOptions: { key: ExamKey; label: string }[] = [
+  { key: "neet", label: "NEET" },
+  { key: "jee", label: "JEE" },
+  { key: "cuet", label: "CUET" },
+  { key: "ipmat", label: "IPMAT" },
+];
 const MAX_SOCIAL_LINKS = 5;
 
 function platformIcon(platform: SocialPlatform) {
@@ -116,6 +127,18 @@ function JoinMentorPage() {
     }
   }
 
+  function toggleExam(exam: ExamKey) {
+    setForm((prev) => ({
+      ...prev,
+      examsTaught: prev.examsTaught.includes(exam)
+        ? prev.examsTaught.filter((e) => e !== exam)
+        : [...prev.examsTaught, exam],
+    }));
+    if (errors.examsTaught) {
+      setErrors((prev) => ({ ...prev, examsTaught: undefined }));
+    }
+  }
+
   function updateSocialLink(index: number, patch: Partial<SocialLinkField>) {
     setForm((prev) => ({
       ...prev,
@@ -154,6 +177,8 @@ function JoinMentorPage() {
     if (!form.institution.trim()) nextErrors.institution = "Institution is required.";
     if (!form.yearOfStudy.trim()) nextErrors.yearOfStudy = "Year of study is required.";
     if (!form.examRank.trim()) nextErrors.examRank = "Exam rank / AIR is required.";
+    if (form.examsTaught.length === 0)
+      nextErrors.examsTaught = "Select at least one exam you'd like to mentor for." as unknown as undefined;
     if (!form.batchTitle.trim()) nextErrors.batchTitle = "Batch title is required.";
     if (!form.targetCategory) nextErrors.targetCategory = "Select a target category.";
     if (!form.pricingTier.trim()) nextErrors.pricingTier = "Pricing tier is required.";
@@ -189,6 +214,7 @@ function JoinMentorPage() {
           institution: form.institution,
           yearOfStudy: form.yearOfStudy,
           examRank: form.examRank,
+          examsTaught: form.examsTaught,
           batchTitle: form.batchTitle,
           targetCategory: form.targetCategory as StudentCategory,
           pricingTier: form.pricingTier,
@@ -228,8 +254,8 @@ function JoinMentorPage() {
             Join EDURACK as a Mentor
           </h1>
           <p className="fluid-body mx-auto mt-3 max-w-xl text-slate-600">
-            Tell us about your background and the batch you'd like to run. Our team
-            reviews every application before your mentor space goes live.
+            Tell us about your background and the batch you'd like to run — for NEET, JEE, CUET, or
+            IPMAT. Our team reviews every application before your mentor space goes live.
           </p>
         </div>
 
@@ -306,6 +332,36 @@ function JoinMentorPage() {
                 placeholder="e.g. AIR 89"
                 error={errors.examRank}
               />
+            </div>
+
+            <div className="mt-4">
+              <label className="mb-2 block text-sm font-semibold text-slate-700">
+                Which exam(s) would you like to mentor for?
+              </label>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {examOptions.map((exam) => {
+                  const active = form.examsTaught.includes(exam.key);
+                  return (
+                    <button
+                      key={exam.key}
+                      type="button"
+                      onClick={() => toggleExam(exam.key)}
+                      className={`flex items-center justify-center gap-1.5 rounded-2xl px-3 py-3 text-sm font-semibold transition-all duration-200 ${
+                        active
+                          ? "clay-btn text-white"
+                          : "clay-inset text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      {active && <Check className="h-3.5 w-3.5" />}
+                      {exam.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-1.5 text-xs text-slate-500">Select all that apply.</p>
+              {errors.examsTaught && (
+                <p className="mt-1.5 text-xs font-medium text-rose-600">{errors.examsTaught}</p>
+              )}
             </div>
           </FormSection>
 

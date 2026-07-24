@@ -25,6 +25,29 @@ export const Route = createFileRoute("/dashboard")({
 
 type Track = "Dropper" | "11th" | "12th" | "";
 type TrackFilter = "All" | "Dropper" | "11th" | "12th";
+type ExamKey = "neet" | "jee" | "cuet" | "ipmat";
+type ExamFilter = "All" | ExamKey;
+
+const EXAM_LABELS: Record<ExamKey, string> = {
+  neet: "NEET",
+  jee: "JEE",
+  cuet: "CUET",
+  ipmat: "IPMAT",
+};
+
+// Maps a student's free-text targetExam (from onboarding, e.g. "JEE Main +
+// Advanced", "NEET + AIIMS") down to one of the four platform exam keys, so
+// recommendations can match on exam even though the profile field itself
+// isn't a strict enum. Falls back to null (no exam match applied) rather
+// than guessing wrong.
+function resolveExamKey(targetExam: string): ExamKey | null {
+  const t = targetExam.toLowerCase();
+  if (t.includes("neet")) return "neet";
+  if (t.includes("jee")) return "jee";
+  if (t.includes("cuet")) return "cuet";
+  if (t.includes("ipmat")) return "ipmat";
+  return null;
+}
 
 type StudentProfile = {
   fullName: string;
@@ -36,6 +59,10 @@ type Bundle = {
   id: string;
   title: string;
   track: string;
+  // Optional and defaulted below — older catalog rows or a not-yet-updated
+  // catalog.ts won't send this, so every read of `exam` goes through
+  // `?? "neet"` rather than assuming the field exists.
+  exam?: ExamKey;
   features: string[];
   sellingPrice: number;
   crossedPrice: number;
@@ -48,6 +75,7 @@ type MentorshipBatch = {
   id: string;
   name: string;
   track: string;
+  exam?: ExamKey;
   highlights: string[];
   sellingPrice: number;
   crossedPrice: number;
@@ -73,6 +101,7 @@ type Listing = {
   kind: "Test Series" | "Mentorship";
   title: string;
   track: string;
+  exam: ExamKey;
   thumbnailUrl: string | null;
   sellingPrice: number;
   crossedPrice: number;
@@ -82,29 +111,33 @@ type Listing = {
 };
 
 function bundleToListing(b: Bundle): Listing {
+  const exam = b.exam ?? "neet";
   return {
     id: b.id,
     kind: "Test Series",
     title: b.title,
     track: b.track,
+    exam,
     thumbnailUrl: b.thumbnailUrl,
     sellingPrice: b.sellingPrice,
     crossedPrice: b.crossedPrice,
     discountPercent: b.discountPercent,
     metaLines: [
-      { icon: BookOpen, text: b.features[0] ?? "NEET test series" },
+      { icon: BookOpen, text: b.features[0] ?? `${EXAM_LABELS[exam]} test series` },
       { icon: Calendar, text: `Access until ${new Date(b.expiryDate).toLocaleDateString()}` },
     ],
-    searchText: `${b.title} ${b.track} ${b.features.join(" ")}`.toLowerCase(),
+    searchText: `${b.title} ${b.track} ${EXAM_LABELS[exam]} ${b.features.join(" ")}`.toLowerCase(),
   };
 }
 
 function batchToListing(b: MentorshipBatch): Listing {
+  const exam = b.exam ?? "neet";
   return {
     id: b.id,
     kind: "Mentorship",
     title: b.name,
     track: b.track,
+    exam,
     thumbnailUrl: b.thumbnailUrl,
     sellingPrice: b.sellingPrice,
     crossedPrice: b.crossedPrice,
@@ -113,11 +146,12 @@ function batchToListing(b: MentorshipBatch): Listing {
       { icon: Users2, text: b.mentorName ? `Mentor: ${b.mentorName}` : "Mentor: unassigned" },
       { icon: BookOpen, text: b.highlights[0] ?? "1:1 mentorship" },
     ],
-    searchText: `${b.name} ${b.track} ${b.highlights.join(" ")} ${b.mentorName ?? ""}`.toLowerCase(),
+    searchText: `${b.name} ${b.track} ${EXAM_LABELS[exam]} ${b.highlights.join(" ")} ${b.mentorName ?? ""}`.toLowerCase(),
   };
 }
 
 const TRACK_FILTERS: TrackFilter[] = ["All", "Dropper", "11th", "12th"];
+const EXAM_FILTERS: ExamFilter[] = ["All", "neet", "jee", "cuet", "ipmat"];
 
 function DashboardPage() {
   const { user, loading } = useAuth();
@@ -127,6 +161,7 @@ function DashboardPage() {
   const [batches, setBatches] = useState<MentorshipBatch[] | null>(null);
   const [mentors, setMentors] = useState<MentorDirectoryEntry[] | null>(null);
   const [trackFilter, setTrackFilter] = useState<TrackFilter>("All");
+  const [examFilter, setExamFilter] = useState<ExamFilter>("All");
   const [query, setQuery] = useState("");
 
   useEffect(() => {
@@ -148,7 +183,7 @@ function DashboardPage() {
       if (p) {
         setProfile({
           fullName: p.fullName,
-          targetExam: p.targetExam || "NEET",
+          targetExam: p.targetExam || "",
           track: (p.track as Track) || "",
         });
       }
@@ -164,16 +199,23 @@ function DashboardPage() {
   }, [bundles, batches]);
 
   const track = profile?.track ?? "";
+  const examKey = profile?.targetExam ? resolveExamKey(profile.targetExam) : null;
 
   const recommended = useMemo(() => {
     if (!allListings || !track) return [];
-    return allListings.filter((l) => l.track === track);
-  }, [allListings, track]);
+    // Match on track always; match on exam too when we could confidently
+    // resolve one from the student's targetExam string. If we couldn't
+    // (unrecognized or not-yet-set targetExam), fall back to track-only so
+    // nothing silently disappears from recommendations.
+    return allListings.filter((l) => l.track === track && (!examKey || l.exam === examKey));
+  }, [allListings, track, examKey]);
 
   const browsed = useMemo(() => {
     if (!allListings) return [];
-    return allListings.filter((l) => trackFilter === "All" || l.track === trackFilter);
-  }, [allListings, trackFilter]);
+    return allListings.filter(
+      (l) => (trackFilter === "All" || l.track === trackFilter) && (examFilter === "All" || l.exam === examFilter),
+    );
+  }, [allListings, trackFilter, examFilter]);
 
   const q = query.trim().toLowerCase();
   const hasQuery = q.length > 0;
@@ -222,7 +264,7 @@ function DashboardPage() {
                 <Target className="h-3.5 w-3.5 shrink-0 text-foreground/40" />
                 <div>
                   <p className="text-[9px] font-semibold uppercase tracking-wide text-foreground/40">Target Exam</p>
-                  <p className="text-xs font-bold text-foreground">{profile?.targetExam || "NEET"}</p>
+                  <p className="text-xs font-bold text-foreground">{profile?.targetExam || "Not set"}</p>
                 </div>
               </div>
               {track && (
@@ -254,9 +296,11 @@ function DashboardPage() {
             <div className="mb-5">
               <h2 className="font-display text-xl font-bold tracking-tight text-foreground sm:text-2xl">
                 Recommended for {track}
+                {examKey && <span className="text-foreground/50"> · {EXAM_LABELS[examKey]}</span>}
               </h2>
               <p className="mt-1 text-sm text-foreground/60">
-                Test series and mentorships matched to your category.
+                Test series and mentorships matched to your category
+                {examKey ? " and target exam." : "."}
               </p>
             </div>
 
@@ -266,7 +310,8 @@ function DashboardPage() {
               </div>
             ) : recommended.length === 0 ? (
               <div className="clay p-6 text-center text-sm text-foreground/60">
-                Nothing published for {track} yet — check "Browse all batches" below.
+                Nothing published for {track}
+                {examKey ? ` · ${EXAM_LABELS[examKey]}` : ""} yet — check "Browse all batches" below.
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
@@ -285,8 +330,23 @@ function DashboardPage() {
                 Browse all batches
               </h2>
               <p className="mt-1 text-sm text-foreground/60">
-                Curious what other tracks offer? Filter by category — nothing here is locked to yours.
+                Curious what other exams or tracks offer? Filter below — nothing here is locked to yours.
               </p>
+            </div>
+
+            <div className="mb-3 flex flex-wrap gap-2">
+              {EXAM_FILTERS.map((e) => (
+                <button
+                  key={e}
+                  type="button"
+                  onClick={() => setExamFilter(e)}
+                  className={`rounded-full px-4 py-2 text-xs font-semibold transition-all duration-200 ${
+                    examFilter === e ? "clay-btn text-white" : "clay-chip text-foreground/70"
+                  }`}
+                >
+                  {e === "All" ? "All Exams" : EXAM_LABELS[e]}
+                </button>
+              ))}
             </div>
 
             <div className="mb-5 flex flex-wrap gap-2">
@@ -295,7 +355,7 @@ function DashboardPage() {
                   key={t}
                   type="button"
                   onClick={() => setTrackFilter(t)}
-                  className={`rounded-full px-4 py-2 text-xs font-semibold transition-all ${
+                  className={`rounded-full px-4 py-2 text-xs font-semibold transition-all duration-200 ${
                     trackFilter === t ? "clay-btn text-white" : "clay-chip text-foreground/70"
                   }`}
                 >
@@ -406,7 +466,7 @@ function MentorResultRow({ mentor }: { mentor: MentorDirectoryEntry }) {
     <Link
       to="/mentor-profile/$mentorId"
       params={{ mentorId: mentor.id }}
-      className="clay-inset flex items-center gap-3 rounded-2xl px-3 py-2.5 transition hover:bg-foreground/5"
+      className="clay-inset flex items-center gap-3 rounded-2xl px-3 py-2.5 transition-colors duration-200 hover:bg-foreground/5"
     >
       <div className="clay flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full">
         {mentor.profilePictureUrl ? (
@@ -446,7 +506,7 @@ function ListingResultRow({ listing }: { listing: Listing }) {
   return (
     <button
       onClick={goToDetail}
-      className="clay-inset flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition hover:bg-foreground/5"
+      className="clay-inset flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors duration-200 hover:bg-foreground/5"
     >
       <div className="clay flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl">
         {listing.thumbnailUrl ? (
@@ -460,7 +520,7 @@ function ListingResultRow({ listing }: { listing: Listing }) {
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-foreground">{listing.title}</p>
         <p className="truncate text-xs text-foreground/50">
-          {listing.kind} · {listing.track || "All tracks"}
+          {EXAM_LABELS[listing.exam]} · {listing.kind} · {listing.track || "All tracks"}
         </p>
       </div>
       <ChevronRight className="h-4 w-4 shrink-0 text-foreground/30" />
@@ -486,8 +546,8 @@ function ListingCard({ listing }: { listing: Listing }) {
         ) : (
           <Users2 className="h-10 w-10 text-foreground/40" strokeWidth={1.5} />
         )}
-        <span className="absolute left-2 top-2 rounded-full bg-background/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-foreground/70 shadow-sm">
-          {listing.track || "All tracks"}
+        <span className="absolute left-2 top-2 rounded-full bg-[var(--sky-deep)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm">
+          {EXAM_LABELS[listing.exam]}
         </span>
         <span className="absolute right-2 top-2 rounded-full bg-background/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-foreground/70 shadow-sm">
           {listing.kind}
@@ -495,9 +555,14 @@ function ListingCard({ listing }: { listing: Listing }) {
       </div>
 
       <div className="flex flex-1 flex-col p-3 pt-4">
-        <h3 className="mb-2 font-display text-base font-bold tracking-tight text-foreground">
-          {listing.title}
-        </h3>
+        <div className="mb-2 flex items-center gap-2">
+          <h3 className="font-display text-base font-bold tracking-tight text-foreground">
+            {listing.title}
+          </h3>
+          <span className="shrink-0 rounded-full bg-foreground/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-foreground/50">
+            {listing.track || "All tracks"}
+          </span>
+        </div>
 
         <div className="mb-4 space-y-1.5">
           {listing.metaLines.map((line, i) => {
@@ -531,7 +596,7 @@ function ListingCard({ listing }: { listing: Listing }) {
           <button
             type="button"
             onClick={goToDetail}
-            className="clay-btn flex flex-1 items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold"
+            className="clay-btn flex flex-1 items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold transition-transform duration-200 hover:-translate-y-0.5"
           >
             <span>Buy Now</span>
             <ArrowRight className="h-4 w-4" />
@@ -540,7 +605,7 @@ function ListingCard({ listing }: { listing: Listing }) {
             type="button"
             aria-label="View details"
             onClick={goToDetail}
-            className="clay-btn-ghost flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-foreground/60"
+            className="clay-btn-ghost flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-foreground/60 transition-transform duration-200 hover:-translate-y-0.5"
           >
             <ChevronRight className="h-4 w-4" />
           </button>

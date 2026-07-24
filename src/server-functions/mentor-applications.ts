@@ -7,9 +7,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getDb } from "@/lib/mongo";
 
-type StudentCategory = "Droppers" | "12th" | "11th";
-type SocialPlatform = "YouTube" | "Instagram" | "LinkedIn" | "X (Twitter)" | "Telegram" | "Other";
-type SocialLink = { platform: SocialPlatform; url: string };
+type ExamKey = "neet" | "jee" | "cuet" | "ipmat";
+
+type StudentCategory = string;
+type SocialLink = { platform: string; url: string };
 
 type CreatorApplicationInput = {
   fullName: string;
@@ -23,20 +24,22 @@ type CreatorApplicationInput = {
   targetCategory: StudentCategory;
   pricingTier: string;
   socialLinks: SocialLink[];
+  examsTaught: ExamKey[];   // ← new: which exam(s) this mentor is applying to mentor for
 };
 
 export const submitCreatorApplication = createServerFn({ method: "POST" })
   .validator((data: CreatorApplicationInput) => data)
   .handler(async ({ data }) => {
-    // Minimal server-side guard — the client already validates the full
-    // form, but a public endpoint with no auth shouldn't trust that alone.
     if (!data.fullName?.trim()) throw new Error("Full name is required.");
     if (!/^\S+@\S+\.\S+$/.test(data.email ?? "")) throw new Error("A valid email is required.");
     if (!/^\d{10}$/.test(data.mobileNumber ?? "")) throw new Error("A valid 10-digit mobile number is required.");
 
+    const validExams: ExamKey[] = ["neet", "jee", "cuet", "ipmat"];
+    const examsTaught = (data.examsTaught ?? []).filter((e) => validExams.includes(e));
+    if (examsTaught.length === 0) throw new Error("Select at least one exam you'd like to mentor for.");
+
     const db = await getDb();
 
-    // Drop any link rows the applicant left empty rather than storing blanks.
     const socialLinks = (data.socialLinks ?? [])
       .filter((l) => l.url?.trim())
       .map((l) => ({ platform: l.platform, url: l.url.trim() }))
@@ -58,6 +61,7 @@ export const submitCreatorApplication = createServerFn({ method: "POST" })
         batchTitle: data.batchTitle.trim(),
         targetCategory: data.targetCategory,
         pricingTier: data.pricingTier.trim(),
+        examsTaught,  // ← stored here
       },
       socialLinks,
       status: "pending",

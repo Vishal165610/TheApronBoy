@@ -21,6 +21,20 @@ export const Route = createFileRoute("/")({
 });
 
 // ---------------------------------------------
+// Exam config — shared across hero selector, mentor
+// showcase, and (soon) other pages that need to filter
+// or badge content by exam.
+// ---------------------------------------------
+type ExamKey = "neet" | "jee" | "cuet" | "ipmat";
+
+const exams: { key: ExamKey; label: string; full: string }[] = [
+  { key: "neet", label: "NEET", full: "NEET (Medical)" },
+  { key: "jee", label: "JEE", full: "JEE Main & Advanced" },
+  { key: "cuet", label: "CUET", full: "CUET (UG)" },
+  { key: "ipmat", label: "IPMAT", full: "IPMAT (IIM)" },
+];
+
+// ---------------------------------------------
 // Scroll-reveal — the page's one motion device.
 // Fades + lifts an element into place the first time
 // it enters the viewport. Respects reduced-motion.
@@ -225,37 +239,64 @@ function Header() {
 }
 
 function Hero() {
+  // Local selection only — swapping this doesn't yet filter the rest of
+  // the page's content by exam. It's here so a JEE/CUET/IPMAT aspirant
+  // immediately sees "this platform is for me too" instead of reading
+  // NEET-only copy and assuming otherwise. Wiring it to actually filter
+  // simulator/mentor content by exam is a natural next step once each
+  // section has exam-tagged data to filter against.
+  const [activeExam, setActiveExam] = useState<ExamKey>("neet");
+
   return (
     <section className="px-4 pb-16 pt-12 sm:px-6 sm:pt-20 lg:pt-28">
       <div className="mx-auto max-w-5xl text-center">
         <Reveal>
           <div className="clay-chip mx-auto inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-sky-700 sm:text-sm">
             <Sparkles className="h-4 w-4 animate-pulse" />
-            NEET 2027 CBT Transition Update
+            One platform. Four of India's toughest entrance exams.
           </div>
         </Reveal>
 
-        <Reveal delay={80}>
+        <Reveal delay={60}>
+          <div className="mx-auto mt-6 flex flex-wrap items-center justify-center gap-2">
+            {exams.map((e) => (
+              <button
+                key={e.key}
+                onClick={() => setActiveExam(e.key)}
+                className={`rounded-full px-4 py-2 text-sm font-bold transition-all duration-200 ${
+                  activeExam === e.key
+                    ? "clay-btn text-white"
+                    : "clay-chip text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                {e.label}
+              </button>
+            ))}
+          </div>
+        </Reveal>
+
+        <Reveal delay={140}>
           <h1 className="fluid-h1 mt-6 font-display font-extrabold tracking-tight text-slate-900">
-            NEET is shifting to{" "}
+            Prepare for{" "}
             <span className="relative inline-block">
               <span className="relative z-10 bg-gradient-to-br from-sky-600 to-teal-500 bg-clip-text text-transparent">
-                Computer Based Testing
+                {exams.find((e) => e.key === activeExam)?.full}
               </span>
-            </span>
-            . Master the screen early.
+            </span>{" "}
+            like it's already exam day.
           </h1>
         </Reveal>
 
-        <Reveal delay={160}>
+        <Reveal delay={220}>
           <p className="fluid-body mx-auto mt-6 max-w-2xl text-slate-600">
-            Don't let the sudden shift to digital layout break your focus. EDURACK provides a
-            <b className="text-slate-800"> 1:1 pixel-exact NTA replica</b> test simulator paired with
-            elite mentorship spaces created directly by top AIIMS rankers.
+            Don't let an unfamiliar screen cost you marks. EDURACK gives NEET, JEE, CUET, and IPMAT
+            aspirants a <b className="text-slate-800">pixel-exact CBT simulator</b> for each exam's
+            real interface, paired with mentorship spaces run directly by top rankers and IIM/IIT/AIIMS
+            students.
           </p>
         </Reveal>
 
-        <Reveal delay={240}>
+        <Reveal delay={300}>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Link
               to="/simulator/live"
@@ -273,12 +314,13 @@ function Hero() {
           </div>
         </Reveal>
 
-        <Reveal delay={320}>
-          <div className="mt-10 grid grid-cols-3 gap-3 sm:mx-auto sm:max-w-xl">
+        <Reveal delay={380}>
+          <div className="mt-10 grid grid-cols-2 gap-3 sm:mx-auto sm:max-w-2xl sm:grid-cols-4">
             {[
-              { k: "1:1", v: "CBT Interface" },
+              { k: "4", v: "Exams Covered" },
+              { k: "1:1", v: "CBT Interfaces" },
               { k: "Open", v: "Mentor Market" },
-              { k: "2027", v: "Format Ready" },
+              { k: "2027", v: "NEET CBT Ready" },
             ].map((s) => (
               <div
                 key={s.k}
@@ -303,11 +345,12 @@ function SimulatorSection() {
           THE EDURACK TESTING ENGINE
         </div>
         <h2 className="fluid-h2 mx-auto mt-4 max-w-3xl font-display font-extrabold text-slate-900">
-          Train your muscle memory for the digital shift.
+          Train your muscle memory for exam-day screens.
         </h2>
         <p className="fluid-body mx-auto mt-3 max-w-2xl text-slate-600">
-          Same right-side question palette, identical navigation flags, and exact section indicators.
-          Eliminate digital exam anxiety months before you step into the test center.
+          Matching question palettes, navigation flags, and section indicators for each exam's actual
+          testing interface — NEET's upcoming CBT shift, JEE and CUET's existing NTA screens, and
+          IPMAT's format. Walk in already familiar with the layout, whichever exam you're sitting.
         </p>
       </Reveal>
       <Reveal delay={120} className="mt-10">
@@ -319,9 +362,9 @@ function SimulatorSection() {
 
 function MentorVideoShowcase() {
   const sampleVideos = [
-    { name: "Rahul Jha", rank: "AIR 14 · AIIMS Delhi", topic: "CBT Strategy" },
-    { name: "Sneha Reddy", rank: "AIR 35 · AIIMS Rishikesh", topic: "Physics Screen Stamina" },
-    { name: "Aman Verma", rank: "AIR 89 · AIIMS Bhopal", topic: "Organic Chemistry Hack" },
+    { name: "Rahul Jha", rank: "AIR 14 NEET · AIIMS Delhi", topic: "NEET CBT Strategy" },
+    { name: "Sneha Reddy", rank: "AIR 312 JEE Adv. · IIT Bombay", topic: "JEE Problem-Solving Speed" },
+    { name: "Aman Verma", rank: "99.8%ile CUET · DU (SRCC)", topic: "CUET Section Time Management" },
   ];
 
   return (
@@ -332,11 +375,12 @@ function MentorVideoShowcase() {
             LEARN FROM THE BEST
           </div>
           <h2 className="fluid-h2 mt-4 font-display font-extrabold text-slate-900">
-            Direct Guidance From Top AIIMS Rankers
+            Direct Guidance From Top Rankers — Across Every Exam
           </h2>
           <p className="fluid-body mt-3 text-slate-600">
-            Hear straight from the mentors who successfully navigated the competitive pressure. Watch
-            their high-yield preparation tips below.
+            Hear straight from mentors who cracked NEET, JEE, CUET, and IPMAT — the competitive
+            pressure is different for each, and so is their advice. Watch their high-yield prep tips
+            below.
           </p>
         </Reveal>
 
@@ -381,29 +425,29 @@ function MentorVideoShowcase() {
 const features = [
   {
     icon: MonitorPlay,
-    title: "1:1 NTA CBT Engine",
-    desc: "Every shortcut, color state, and layout design precisely mirrors the upcoming digital format.",
+    title: "1:1 Exam-Specific CBT Engines",
+    desc: "Every shortcut, color state, and layout mirrors each exam's real testing interface — NEET, JEE, CUET, and IPMAT alike.",
     color: "text-sky-600",
     bg: "bg-sky-100",
   },
   {
     icon: LayoutDashboard,
     title: "Syllabus-Driven Trackers",
-    desc: "Tailored structures for Class 11, 12, and Droppers to pace out high-weightage topics.",
+    desc: "Tailored structures per exam and class level — Class 11, 12, and Droppers — to pace out high-weightage topics.",
     color: "text-teal-600",
     bg: "bg-teal-100",
   },
   {
     icon: CalendarCheck,
     title: "Direct Mentor Marketplace",
-    desc: "Browse premium batches listed directly by top-tier creators at their own customized rates.",
+    desc: "Browse premium batches listed by rankers across all four exams, each at their own customized rates.",
     color: "text-orange-600",
     bg: "bg-orange-100",
   },
   {
     icon: LineChart,
     title: "Screen Analytics",
-    desc: "Tracks your speed per question, subject-wise accuracy, and projected multi-shift normalized percentile.",
+    desc: "Tracks speed per question, subject-wise accuracy, and projected percentile — normalized for each exam's own scoring pattern.",
     color: "text-purple-600",
     bg: "bg-purple-100",
   },
@@ -418,7 +462,7 @@ function FeaturesGrid() {
             THE EDURACK ADVANTAGE
           </div>
           <h2 className="fluid-h2 mt-4 font-display font-extrabold text-slate-900">
-            Built for serious aspirants tackling the new pattern.
+            Built for serious aspirants, whichever exam you're tackling.
           </h2>
         </Reveal>
 
@@ -445,7 +489,7 @@ function FeaturesGrid() {
                 Launch your first CBT mock right now.
               </h3>
               <p className="mt-2 text-slate-600">
-                Get ahead of the curve before the official 2027 transition hits.
+                NEET, JEE, CUET, or IPMAT — pick your exam and get ahead of the curve today.
               </p>
             </div>
             <Link
@@ -472,7 +516,7 @@ function MarketplaceBanner() {
           <div className="relative z-10 max-w-3xl">
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold tracking-wide text-teal-300 backdrop-blur-sm">
               <UserCheck className="h-3.5 w-3.5" />
-              Are you an AIIMS Student or Med-Creator?
+              Cracked NEET, JEE, CUET, or IPMAT? Turn that into a business.
             </div>
             <h2 className="mt-4 font-display text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
               Monetize your expertise. Run your own mentorship store on EDURACK.
@@ -480,8 +524,8 @@ function MarketplaceBanner() {
             <p className="mt-4 text-base leading-relaxed text-slate-300">
               Stop dealing with unorganized tracking spreadsheets, structural setup barriers, or manual
               group entry confirmations. Set your fixed price tiers, deliver premium guidance
-              schedules, and let our automated payment configuration process your withdrawals
-              seamlessly.
+              schedules for your exam, and let our automated payment configuration process your
+              withdrawals seamlessly.
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-4">
@@ -527,7 +571,7 @@ const footerColumns: { title: string; links: FooterLink[] }[] = [
   {
     title: "Aspirants",
     links: [
-      { label: "NEET Hub", type: "route", to: "/" },
+      { label: "NEET · JEE · CUET · IPMAT Hub", type: "route", to: "/" },
       { label: "Free Papers", type: "route", to: "/simulator/live" },
       { label: "Contact Us", type: "route", to: "/contact" },
     ],
@@ -558,7 +602,7 @@ function Footer() {
               <span className="font-display text-lg font-bold">EDURACK</span>
             </Link>
             <p className="mt-3 text-sm text-slate-600">
-              The next-gen CBT testing and mentorship platform.
+              The CBT testing and mentorship platform for NEET, JEE, CUET & IPMAT.
             </p>
           </div>
           {footerColumns.map((col) => (
@@ -567,7 +611,7 @@ function Footer() {
         </div>
         <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/70 pt-5 text-xs text-slate-500">
           <span>© {new Date().getFullYear()} EDURACK. All rights reserved.</span>
-          <span>Engineered for the NEET 2027 CBT Shift.</span>
+          <span>Built for India's toughest entrance exams.</span>
         </div>
       </div>
     </footer>

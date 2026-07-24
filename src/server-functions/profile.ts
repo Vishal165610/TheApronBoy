@@ -18,7 +18,7 @@ const EMPTY_ONBOARDING_FIELDS: OnboardingProfileInput = {
   city: "",
   currentClass: "",
   board: "",
-  targetExam: "NEET",
+  targetExam: "",
   track: "",
 };
 
